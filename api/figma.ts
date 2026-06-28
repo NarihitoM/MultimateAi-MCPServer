@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
     switch (tool) {
       case "figma_read_file": {
-        const { fileKey, depth } = args as any;
+        const { fileKey } = args as any;
         const data = await figmaGet(token, `/files/${fileKey}`);
         const simplifyNode = (node: any): any => ({ id: node.id, name: node.name, type: node.type, visible: node.visible, children: node.children ? node.children.map(simplifyNode) : undefined });
         result = JSON.stringify({ name: data.name, lastModified: data.lastModified, version: data.version, document: simplifyNode(data.document) });
