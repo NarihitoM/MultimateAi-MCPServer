@@ -7,6 +7,7 @@ const McpRequestSchema = z.object({
   auth: z.record(z.unknown()).optional(),
 });
 
+
 function ok(content: unknown) {
   return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(content) }] }), { headers: { "Content-Type": "application/json" } });
 }
