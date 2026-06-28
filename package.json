@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "build": "node esbuild.config.mjs",
     "dev": "vercel dev"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
     "@types/node": "^22.0.0",
     "typescript": "^5.8.0",
     "vercel": "^41.0.0",
-    "@vercel/node": "^5.0.0"
+    "@vercel/node": "^5.0.0",
+    "esbuild": "^0.25.0"
   }
 }

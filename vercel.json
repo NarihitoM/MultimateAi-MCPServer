@@ -1,8 +1,11 @@
 {
+  "buildCommand": "npm run build",
+  "builds": [
+    { "src": "dist/api/*.js", "use": "@vercel/node" }
+  ],
   "functions": {
-    "api/**/*.ts": {
+    "dist/api/*.js": {
       "maxDuration": 30
     }
   }
 }
-
