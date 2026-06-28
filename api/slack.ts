@@ -1,11 +1,24 @@
-import { McpRequestSchema, getAuth, ok, err } from "./_shared.js";
+import { z } from "zod";
 import { WebClient } from "@slack/web-api";
+
+const McpRequestSchema = z.object({
+  tool: z.string(),
+  args: z.record(z.unknown()),
+  auth: z.record(z.unknown()).optional(),
+});
+
+function ok(content: unknown) {
+  return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(content) }] }), { headers: { "Content-Type": "application/json" } });
+}
+function err(message: string, status = 400) {
+  return new Response(JSON.stringify({ content: [{ type: "text", text: message }] }), { status, headers: { "Content-Type": "application/json" } });
+}
 
 export async function POST(req: Request) {
   const parsed = McpRequestSchema.safeParse(await req.json());
   if (!parsed.success) return err("Invalid request");
-  const { tool, args, auth: rawAuth } = parsed.data;
-  const auth = getAuth(rawAuth);
+  const { tool, args } = parsed.data;
+  const auth = (parsed.data.auth ?? {}) as Record<string, string | undefined>;
 
   try {
     const client = new WebClient(auth.slack_token);
@@ -43,8 +56,7 @@ export async function POST(req: Request) {
         result = JSON.stringify(res.team);
         break;
       }
-      default:
-        return err(`Unknown tool: ${tool}`);
+      default: return err(`Unknown tool: ${tool}`);
     }
 
     return ok(result);

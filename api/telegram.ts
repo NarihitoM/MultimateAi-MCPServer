@@ -1,12 +1,25 @@
-import { McpRequestSchema, getAuth, ok, err } from "./_shared.js";
+import { z } from "zod";
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
+
+const McpRequestSchema = z.object({
+  tool: z.string(),
+  args: z.record(z.unknown()),
+  auth: z.record(z.unknown()).optional(),
+});
+
+function ok(content: unknown) {
+  return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(content) }] }), { headers: { "Content-Type": "application/json" } });
+}
+function err(message: string, status = 400) {
+  return new Response(JSON.stringify({ content: [{ type: "text", text: message }] }), { status, headers: { "Content-Type": "application/json" } });
+}
 
 export async function POST(req: Request) {
   const parsed = McpRequestSchema.safeParse(await req.json());
   if (!parsed.success) return err("Invalid request");
-  const { tool, args, auth: rawAuth } = parsed.data;
-  const auth = getAuth(rawAuth);
+  const { tool, args } = parsed.data;
+  const auth = (parsed.data.auth ?? {}) as Record<string, string | undefined>;
 
   const client = new TelegramClient(
     new StringSession(auth.telegram_session),
@@ -22,35 +35,20 @@ export async function POST(req: Request) {
     switch (tool) {
       case "send_message": {
         const { userid, message } = args as any;
-        await client.sendMessage(userid, {
-          message: `${message}\n\n\n<i>— Sent Via MultimateAIAgent</i>`,
-          parseMode: "html",
-        });
+        await client.sendMessage(userid, { message: `${message}\n\n\n<i>— Sent Via MultimateAIAgent</i>`, parseMode: "html" });
         result = JSON.stringify({ success: true, message: "Message sent successfully", to: userid });
         break;
       }
       case "fetch_message": {
         const { userid } = args as any;
         const messages = await client.getMessages(userid, { limit: 20 });
-        result = JSON.stringify({
-          success: true, message: "Messages fetched successfully", to: userid,
-          data: messages.map((m: any) => ({ text: m.message, date: m.date })),
-        });
+        result = JSON.stringify({ success: true, message: "Messages fetched successfully", to: userid, data: messages.map((m: any) => ({ text: m.message, date: m.date })) });
         break;
       }
       case "fetch_chat_user": {
         const { userid } = args as any;
         const participants = await client.getParticipants(userid);
-        result = JSON.stringify({
-          success: true,
-          data: participants.map((p: any) => ({
-            userId: p.id?.toString(),
-            fullName: `${p.firstName || ""} ${p.lastName || ""}`.trim(),
-            username: p.username || null,
-            role: p.participant?.className === 'ChannelParticipantAdmin' ||
-              p.participant?.className === 'ChannelParticipantCreator' ? 'admin' : 'member',
-          })),
-        });
+        result = JSON.stringify({ success: true, data: participants.map((p: any) => ({ userId: p.id?.toString(), fullName: `${p.firstName || ""} ${p.lastName || ""}`.trim(), username: p.username || null, role: p.participant?.className === 'ChannelParticipantAdmin' || p.participant?.className === 'ChannelParticipantCreator' ? 'admin' : 'member' })) });
         break;
       }
       case "get_info": {
@@ -59,8 +57,7 @@ export async function POST(req: Request) {
         result = JSON.stringify({ success: true, data: info });
         break;
       }
-      default:
-        return err(`Unknown tool: ${tool}`);
+      default: return err(`Unknown tool: ${tool}`);
     }
 
     return ok(result);

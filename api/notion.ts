@@ -1,11 +1,24 @@
-import { McpRequestSchema, getAuth, ok, err } from "./_shared.js";
+import { z } from "zod";
 import { Client } from "@notionhq/client";
+
+const McpRequestSchema = z.object({
+  tool: z.string(),
+  args: z.record(z.unknown()),
+  auth: z.record(z.unknown()).optional(),
+});
+
+function ok(content: unknown) {
+  return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(content) }] }), { headers: { "Content-Type": "application/json" } });
+}
+function err(message: string, status = 400) {
+  return new Response(JSON.stringify({ content: [{ type: "text", text: message }] }), { status, headers: { "Content-Type": "application/json" } });
+}
 
 export async function POST(req: Request) {
   const parsed = McpRequestSchema.safeParse(await req.json());
   if (!parsed.success) return err("Invalid request");
-  const { tool, args, auth: rawAuth } = parsed.data;
-  const auth = getAuth(rawAuth);
+  const { tool, args } = parsed.data;
+  const auth = (parsed.data.auth ?? {}) as Record<string, string | undefined>;
 
   try {
     const notion = new Client({ auth: auth.notion_token });
@@ -30,43 +43,25 @@ export async function POST(req: Request) {
         const { pageId, title, archived } = args as any;
         const properties: any = {};
         if (title) properties.title = { title: [{ text: { content: title } }] };
-        const res = await notion.pages.update({
-          page_id: pageId, archived,
-          properties: Object.keys(properties).length > 0 ? properties : undefined,
-        });
-        result = JSON.stringify({
-          success: true, message: archived ? "Page archived successfully" : "Page updated successfully",
-          pageId: res.id,
-        });
+        const res = await notion.pages.update({ page_id: pageId, archived, properties: Object.keys(properties).length > 0 ? properties : undefined });
+        result = JSON.stringify({ success: true, message: archived ? "Page archived successfully" : "Page updated successfully", pageId: res.id });
         break;
       }
       case "append_notion_blocks": {
         const inp = args as any;
-        try {
-          await notion.blocks.children.append({ block_id: inp.pageId, children: inp.blocks as any[] });
-          result = JSON.stringify({ success: true, message: `Blocks Appended\n\nSuccessfully added ${inp.blocks.length} blocks to the page.` });
-        } catch {
-          result = JSON.stringify({ success: false, message: "Failed to append blocks to the Notion page." });
-        }
+        try { await notion.blocks.children.append({ block_id: inp.pageId, children: inp.blocks as any[] }); result = JSON.stringify({ success: true, message: `Blocks Appended\n\nSuccessfully added ${inp.blocks.length} blocks to the page.` }); }
+        catch { result = JSON.stringify({ success: false, message: "Failed to append blocks to the Notion page." }); }
         break;
       }
       case "create_new_page": {
         const inp = args as any;
-        const res = await notion.pages.create({
-          parent: { page_id: inp.parentPageId },
-          properties: { title: { title: [{ text: { content: inp.title } }] } },
-          children: inp.blocks?.length > 0 ? inp.blocks : undefined,
-        });
+        const res = await notion.pages.create({ parent: { page_id: inp.parentPageId }, properties: { title: { title: [{ text: { content: inp.title } }] } }, children: inp.blocks?.length > 0 ? inp.blocks : undefined });
         result = JSON.stringify({ success: true, message: "New page created successfully", pageId: res.id });
         break;
       }
       case "create_notion_database": {
         const inp = args as any;
-        const res = await notion.databases.create({
-          parent: { type: "page_id", page_id: inp.parentPageId },
-          title: [{ type: "text", text: { content: inp.title } }],
-          initial_data_source: { properties: inp.properties as any },
-        });
+        const res = await notion.databases.create({ parent: { type: "page_id", page_id: inp.parentPageId }, title: [{ type: "text", text: { content: inp.title } }], initial_data_source: { properties: inp.properties as any } });
         result = JSON.stringify({ success: true, message: "Database created successfully", databaseId: res.id });
         break;
       }
@@ -100,15 +95,11 @@ export async function POST(req: Request) {
       }
       case "add_notion_database_row": {
         const inp = args as any;
-        const res = await notion.pages.create({
-          parent: { database_id: inp.databaseId },
-          properties: inp.properties as any,
-        });
+        const res = await notion.pages.create({ parent: { database_id: inp.databaseId }, properties: inp.properties as any });
         result = JSON.stringify({ success: true, message: "Row added to database successfully", pageId: res.id });
         break;
       }
-      default:
-        return err(`Unknown tool: ${tool}`);
+      default: return err(`Unknown tool: ${tool}`);
     }
 
     return ok(result);

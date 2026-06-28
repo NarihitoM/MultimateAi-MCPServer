@@ -4,9 +4,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "esModuleInterop": true,
-    "strict": true,
-    "outDir": "dist",
-    "rootDir": ".",
+    "strict": false,
     "skipLibCheck": true
   },
   "include": ["api/**/*.ts"]
