@@ -10,8 +10,8 @@
     "@notionhq/client": "^5.0.0",
     "@slack/web-api": "^7.0.0",
     "axios": "^1.14.0",
+    "firecrawl": "^4.28.3",
     "googleapis": "^171.0.0",
-    "serpapi": "^2.0.0",
     "telegram": "^2.0.0",
     "zod": "^3.22.0"
   },
