@@ -1,0 +1,22 @@
+{
+  "name": "mcp-severs",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "googleapis": "^171.0.0",
+    "@notionhq/client": "^5.0.0",
+    "@slack/web-api": "^7.0.0",
+    "telegram": "^2.0.0",
+    "axios": "^1.14.0",
+    "serpapi": "^2.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0",
+    "vercel": "^41.0.0"
+  }
+}
