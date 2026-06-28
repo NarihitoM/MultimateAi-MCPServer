@@ -6,6 +6,12 @@ export const McpRequestSchema = z.object({
   auth: z.record(z.unknown()).optional(),
 });
 
+export type McpAuth = Record<string, string | undefined>;
+
+export function getAuth(auth: unknown): McpAuth {
+  return (auth ?? {}) as McpAuth;
+}
+
 export function ok(content: unknown): Response {
   return new Response(
     JSON.stringify({ content: [{ type: "text", text: JSON.stringify(content) }] }),

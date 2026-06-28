@@ -1,13 +1,14 @@
-import { McpRequestSchema, ok, err } from "./_shared.js";
+import { McpRequestSchema, getAuth, ok, err } from "./_shared.js";
 import { WebClient } from "@slack/web-api";
 
 export async function POST(req: Request) {
   const parsed = McpRequestSchema.safeParse(await req.json());
   if (!parsed.success) return err("Invalid request");
-  const { tool, args, auth } = parsed.data;
+  const { tool, args, auth: rawAuth } = parsed.data;
+  const auth = getAuth(rawAuth);
 
   try {
-    const client = new WebClient(auth?.slack_token);
+    const client = new WebClient(auth.slack_token);
     let result: any;
 
     switch (tool) {

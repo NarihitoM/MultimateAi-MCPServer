@@ -1,4 +1,4 @@
-import { McpRequestSchema, ok, err } from "./_shared.js";
+import { McpRequestSchema, getAuth, ok, err } from "./_shared.js";
 import { google } from "googleapis";
 
 function createGoogleAuth(email: string, key: string) {
@@ -12,10 +12,11 @@ function createGoogleAuth(email: string, key: string) {
 export async function POST(req: Request) {
   const parsed = McpRequestSchema.safeParse(await req.json());
   if (!parsed.success) return err("Invalid request");
-  const { tool, args, auth } = parsed.data;
+  const { tool, args, auth: rawAuth } = parsed.data;
+  const auth = getAuth(rawAuth);
 
   try {
-    const googleAuth = createGoogleAuth(auth?.GOOGLE_EMAIL, auth?.GOOGLE_KEY);
+    const googleAuth = createGoogleAuth(auth.GOOGLE_EMAIL!, auth.GOOGLE_KEY!);
     let result: any;
 
     switch (tool) {

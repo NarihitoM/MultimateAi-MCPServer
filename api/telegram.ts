@@ -1,14 +1,15 @@
-import { McpRequestSchema, ok, err } from "./_shared.js";
+import { McpRequestSchema, getAuth, ok, err } from "./_shared.js";
 import { TelegramClient } from "telegram";
-import { StringSession } from "telegram/sessions/index.js";
+import { StringSession } from "telegram/sessions";
 
 export async function POST(req: Request) {
   const parsed = McpRequestSchema.safeParse(await req.json());
   if (!parsed.success) return err("Invalid request");
-  const { tool, args, auth } = parsed.data;
+  const { tool, args, auth: rawAuth } = parsed.data;
+  const auth = getAuth(rawAuth);
 
   const client = new TelegramClient(
-    new StringSession(auth?.telegram_session),
+    new StringSession(auth.telegram_session),
     Number(process.env.TELEGRAM_API_ID),
     process.env.TELEGRAM_API_HASH || "",
     { connectionRetries: 5 }

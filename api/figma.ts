@@ -1,23 +1,24 @@
-import { McpRequestSchema, ok, err } from "./_shared.js";
+import { McpRequestSchema, getAuth, ok, err } from "./_shared.js";
 import axios from "axios";
 
 const FIGMA_API_BASE = "https://api.figma.com/v1";
 
 function figmaGet(token: string, path: string) {
-  return axios.get(`${FIGMA_API_BASE}${path}`, { headers: { "X-Figma-Token": token } }).then(r => r.data);
+  return axios.get(`${FIGMA_API_BASE}${path}`, { headers: { "X-Figma-Token": token } }).then((r: any) => r.data);
 }
 
 function figmaPost(token: string, path: string, body: any) {
-  return axios.post(`${FIGMA_API_BASE}${path}`, body, { headers: { "X-Figma-Token": token, "Content-Type": "application/json" } }).then(r => r.data);
+  return axios.post(`${FIGMA_API_BASE}${path}`, body, { headers: { "X-Figma-Token": token, "Content-Type": "application/json" } }).then((r: any) => r.data);
 }
 
 export async function POST(req: Request) {
   const parsed = McpRequestSchema.safeParse(await req.json());
   if (!parsed.success) return err("Invalid request");
-  const { tool, args, auth } = parsed.data;
+  const { tool, args, auth: rawAuth } = parsed.data;
+  const auth = getAuth(rawAuth);
 
   try {
-    const token = auth?.figma_token;
+    const token = auth.figma_token!;
     let result: any;
 
     switch (tool) {

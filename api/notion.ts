@@ -1,13 +1,14 @@
-import { McpRequestSchema, ok, err } from "./_shared.js";
+import { McpRequestSchema, getAuth, ok, err } from "./_shared.js";
 import { Client } from "@notionhq/client";
 
 export async function POST(req: Request) {
   const parsed = McpRequestSchema.safeParse(await req.json());
   if (!parsed.success) return err("Invalid request");
-  const { tool, args, auth } = parsed.data;
+  const { tool, args, auth: rawAuth } = parsed.data;
+  const auth = getAuth(rawAuth);
 
   try {
-    const notion = new Client({ auth: auth?.notion_token });
+    const notion = new Client({ auth: auth.notion_token });
     let result: any;
 
     switch (tool) {
