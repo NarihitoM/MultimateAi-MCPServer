@@ -5,10 +5,10 @@ const hits = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 60_000; // 1 minute
 const MAX_REQUESTS = 30;  // per window per key
 
-function getRateKey(req: Request): string {
-  const apiKey = req.headers.get("x-api-key") || "";
-  const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() || "unknown";
+function getRateKey(req: any): string {
+  const apiKey = (req.headers["x-api-key"] as string) || "";
+  const forwarded = (req.headers["x-forwarded-for"] as string) || "";
+  const ip = forwarded.split(",")[0]?.trim() || "unknown";
   return apiKey || ip;
 }
 
@@ -30,29 +30,25 @@ function checkRateLimit(key: string): { allowed: boolean; remaining: number; res
 }
 
 // --- Auth check ---
-function checkAuth(req: Request): { ok: boolean; error?: string } {
+function checkAuth(req: any): { ok: boolean; error?: string } {
   if (!MCP_API_KEY) return { ok: true }; // no key configured = open access
-  const provided = req.headers.get("x-api-key");
+  const provided = req.headers["x-api-key"];
   if (!provided) return { ok: false, error: "Missing X-API-Key header" };
   if (provided !== MCP_API_KEY) return { ok: false, error: "Invalid API key" };
   return { ok: true };
 }
 
 export interface MiddlewareResult {
-  response?: Response;
+  error?: string;
+  statusCode?: number;
   rateLimit?: { remaining: number; resetAt: number };
 }
 
-export function middleware(req: Request): MiddlewareResult {
+export function middleware(req: any): MiddlewareResult {
   // Auth
   const auth = checkAuth(req);
   if (!auth.ok) {
-    return {
-      response: new Response(
-        JSON.stringify({ content: [{ type: "text", text: auth.error }] }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      ),
-    };
+    return { error: auth.error, statusCode: 401 };
   }
 
   // Rate limit
@@ -60,10 +56,8 @@ export function middleware(req: Request): MiddlewareResult {
   const rate = checkRateLimit(rateKey);
   if (!rate.allowed) {
     return {
-      response: new Response(
-        JSON.stringify({ content: [{ type: "text", text: `Rate limit exceeded. Try again in ${Math.ceil((rate.resetAt - Date.now()) / 1000)}s.` }] }),
-        { status: 429, headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil((rate.resetAt - Date.now()) / 1000)) } }
-      ),
+      error: `Rate limit exceeded. Try again in ${Math.ceil((rate.resetAt - Date.now()) / 1000)}s.`,
+      statusCode: 429,
     };
   }
 
