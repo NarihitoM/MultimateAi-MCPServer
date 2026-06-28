@@ -1,9 +1,7 @@
 import { z } from "zod";
-import Firecrawl from "firecrawl";
+import { firecrawl } from "../lib/firecrawl.js";
 import type { ToolRegistrar } from "./helpers.js";
 import { textResult } from "./helpers.js";
-
-const firecrawl = new Firecrawl();
 
 export const registerWebSearchTools: ToolRegistrar = (server, _auth) => {
   server.tool("web_search", "Search the web using Google", { query: z.string() }, async ({ query }) => {
