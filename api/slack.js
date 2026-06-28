@@ -16,7 +16,7 @@ var __copyProps = (to, from, except, desc) => {
 };
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// api/slack.ts
+// src/api/slack.ts
 var slack_exports = {};
 __export(slack_exports, {
   POST: () => POST

@@ -16,7 +16,7 @@ var __copyProps = (to, from, except, desc) => {
 };
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// api/telegram.ts
+// src/api/telegram.ts
 var telegram_exports = {};
 __export(telegram_exports, {
   POST: () => POST

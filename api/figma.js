@@ -26,7 +26,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// api/figma.ts
+// src/api/figma.ts
 var figma_exports = {};
 __export(figma_exports, {
   POST: () => POST

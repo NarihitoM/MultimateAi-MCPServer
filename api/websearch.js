@@ -16,7 +16,7 @@ var __copyProps = (to, from, except, desc) => {
 };
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// api/websearch.ts
+// src/api/websearch.ts
 var websearch_exports = {};
 __export(websearch_exports, {
   POST: () => POST

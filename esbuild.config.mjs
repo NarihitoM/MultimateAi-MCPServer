@@ -1,13 +1,13 @@
 import esbuild from "esbuild";
 
 const entryPoints = [
-  "api/sheets.ts",
-  "api/docs.ts",
-  "api/notion.ts",
-  "api/slack.ts",
-  "api/telegram.ts",
-  "api/figma.ts",
-  "api/websearch.ts",
+  "src/api/sheets.ts",
+  "src/api/docs.ts",
+  "src/api/notion.ts",
+  "src/api/slack.ts",
+  "src/api/telegram.ts",
+  "src/api/figma.ts",
+  "src/api/websearch.ts",
 ];
 
 await esbuild.build({
@@ -15,7 +15,7 @@ await esbuild.build({
   bundle: true,
   platform: "node",
   format: "cjs",
-  outdir: "dist/api",
-  outbase: "api",
+  outdir: "api",
+  outbase: "src/api",
   packages: "external",
 });
