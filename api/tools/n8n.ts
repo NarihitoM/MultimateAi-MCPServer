@@ -6,21 +6,26 @@ export const registerN8nTools: ToolRegistrar = (server, _auth) => {
   const getHeaders = () => {
     const n8nUrl = _auth["X-N8N-URL"];
     if (!n8nUrl) throw new Error("n8n URL not configured.");
-    return {
+    const headers: Record<string, string> = {
       "X-N8N-URL": n8nUrl,
     };
+    if (_auth["X-N8N-Cookie"]) headers["Cookie"] = _auth["X-N8N-Cookie"];
+    if (_auth["X-N8N-API-Key"]) headers["X-N8N-API-Key"] = _auth["X-N8N-API-Key"];
+    return headers;
   };
-
 
   const n8nFetch = async (path: string, options: RequestInit = {}) => {
     const headers = getHeaders();
-    const url = `${headers["X-N8N-URL"]}/api/v1${path}`;
+    const n8nUrl = headers["X-N8N-URL"];
+    const url = `${n8nUrl}/api/v1${path}`;
+    const fetchHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (headers["Cookie"]) fetchHeaders["Cookie"] = headers["Cookie"];
+    if (headers["X-N8N-API-Key"]) fetchHeaders["X-N8N-API-Key"] = headers["X-N8N-API-Key"];
     const response = await fetch(url, {
       ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
+      headers: { ...fetchHeaders, ...(options.headers as Record<string, string> || {}) },
     });
 
     if (!response.ok) {
