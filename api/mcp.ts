@@ -9,6 +9,7 @@ import {
   registerSheetsTools,
   registerDocsTools,
   registerWebSearchTools,
+  registerN8nTools,
 } from "./tools/index.js";
 
 function sendJson(res: any, status: number, body: any) {
@@ -39,6 +40,8 @@ export default async function handler(req: any, res: any) {
     telegram_session: req.headers["x-telegram-session"] || "",
     GOOGLE_EMAIL: req.headers["x-google-email"] || "",
     GOOGLE_KEY: req.headers["x-google-key"] || "",
+    "X-N8N-URL": req.headers["x-n8n-url"] || "",
+    "X-N8N-API-KEY": req.headers["x-n8n-api-key"] || "",
   };
 
   const server = new McpServer({ name: "multimate-mcp", version: "1.0.0" });
@@ -50,6 +53,7 @@ export default async function handler(req: any, res: any) {
   registerSheetsTools(server, auth);
   registerDocsTools(server, auth);
   registerWebSearchTools(server, auth);
+  registerN8nTools(server, auth);
 
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   await server.connect(transport);
