@@ -5,13 +5,12 @@ import { textResult } from "./helpers.js";
 export const registerN8nTools: ToolRegistrar = (server, _auth) => {
   const getHeaders = () => {
     const n8nUrl = _auth["X-N8N-URL"];
-    const apiKey = _auth["X-N8N-API-KEY"];
     if (!n8nUrl) throw new Error("n8n URL not configured.");
     return {
       "X-N8N-URL": n8nUrl,
-      "X-N8N-API-KEY": apiKey || "",
     };
   };
+
 
   const n8nFetch = async (path: string, options: RequestInit = {}) => {
     const headers = getHeaders();
@@ -19,11 +18,11 @@ export const registerN8nTools: ToolRegistrar = (server, _auth) => {
     const response = await fetch(url, {
       ...options,
       headers: {
-        "X-N8N-API-KEY": headers["X-N8N-API-KEY"],
         "Content-Type": "application/json",
         ...options.headers,
       },
     });
+
     if (!response.ok) {
       const error = await response.text();
       throw new Error(`n8n API error (${response.status}): ${error}`);
