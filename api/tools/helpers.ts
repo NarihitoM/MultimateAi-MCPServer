@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
+export type { McpServer };
 export type ToolRegistrar = (server: McpServer, auth: Record<string, string>) => void;
 
 export function createGoogleAuth(email: string, key: string) {
