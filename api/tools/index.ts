@@ -1,24 +1,22 @@
-export type { ToolRegistrar } from "./helpers.js";
-import { registerTelegramTools } from "./telegram.js";
-import { registerSlackTools } from "./slack.js";
-import { registerNotionTools } from "./notion.js";
-import { registerSheetsTools } from "./sheets.js";
-import { registerDocsTools } from "./docs.js";
-import { registerWebSearchTools } from "./websearch.js";
-import { registerN8nTools } from "./n8n.js";
+import { readdirSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import type { ToolRegistrar } from "./helpers.js";
 
-const registrars = [
-  registerTelegramTools,
-  registerSlackTools,
-  registerNotionTools,
-  registerSheetsTools,
-  registerDocsTools,
-  registerWebSearchTools,
-  registerN8nTools,
-];
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-export function registerAllTools(server: any, auth: Record<string, string>) {
-  for (const reg of registrars) {
-    reg(server, auth);
+const SKIP = new Set(["index.js", "helpers.js"]);
+
+export async function registerAllTools(server: any, auth: Record<string, string>) {
+  const files = readdirSync(__dirname).filter(f => f.endsWith(".js") && !SKIP.has(f));
+  for (const file of files) {
+    try {
+      const mod = await import(`./${file}`);
+      const registrar = Object.values(mod).find(v => typeof v === "function") as ToolRegistrar | undefined;
+      if (registrar) registrar(server, auth);
+    } catch (e) {
+      console.error(`Failed to load tools from ${file}:`, e);
+    }
   }
 }
