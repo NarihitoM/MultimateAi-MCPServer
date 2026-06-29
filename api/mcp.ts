@@ -8,6 +8,7 @@ import {
   registerSheetsTools,
   registerDocsTools,
   registerWebSearchTools,
+  registerWebScrapeTools,
   registerN8nTools,
 } from "./tools/index.js";
 
@@ -51,6 +52,7 @@ export default async function handler(req: any, res: any) {
   registerSheetsTools(server, auth);
   registerDocsTools(server, auth);
   registerWebSearchTools(server, auth);
+  registerWebScrapeTools(server, auth);
   registerN8nTools(server, auth);
 
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
