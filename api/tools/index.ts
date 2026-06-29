@@ -5,7 +5,7 @@ import { WebClient } from "@slack/web-api";
 import { Client as NotionClient } from "@notionhq/client";
 import { google } from "googleapis";
 import { firecrawl } from "../lib/firecrawl.js";
-import type { ToolRegistrar, McpServer } from "./helpers.js";
+import type { McpServer } from "./helpers.js";
 import { createGoogleAuth, normalizeBlock, textResult } from "./helpers.js";
 
 function makeTelegramClient(session: string) {
