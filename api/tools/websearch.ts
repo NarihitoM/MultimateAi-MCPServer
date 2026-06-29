@@ -10,4 +10,9 @@ export const registerWebSearchTools: ToolRegistrar = (server, _auth) => {
     const text = web.map((r: any) => `${r.title}: ${r.description}`).join("\n");
     return textResult(text || "No results found.");
   });
+
+  server.tool("web_scrape", "Scrape a webpage URL and return its full content as markdown", { url: z.string() }, async ({ url }) => {
+    const result = await firecrawl.scrape(url, { formats: ["markdown"] }) as any;
+    return textResult(result?.markdown || "No content found.");
+  });
 };

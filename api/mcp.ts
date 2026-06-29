@@ -1,16 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { middleware } from "./middleware.js";
-import {
-  registerTelegramTools,
-  registerSlackTools,
-  registerNotionTools,
-  registerSheetsTools,
-  registerDocsTools,
-  registerWebSearchTools,
-  registerWebScrapeTools,
-  registerN8nTools,
-} from "./tools/index.js";
+import { registerAllTools } from "./tools/index.js";
 
 function sendJson(res: any, status: number, body: any) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -46,14 +37,7 @@ export default async function handler(req: any, res: any) {
 
   const server = new McpServer({ name: "multimate-mcp", version: "1.0.0" });
 
-  registerTelegramTools(server, auth);
-  registerSlackTools(server, auth);
-  registerNotionTools(server, auth);
-  registerSheetsTools(server, auth);
-  registerDocsTools(server, auth);
-  registerWebSearchTools(server, auth);
-  registerWebScrapeTools(server, auth);
-  registerN8nTools(server, auth);
+  registerAllTools(server, auth);
 
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   await server.connect(transport);
