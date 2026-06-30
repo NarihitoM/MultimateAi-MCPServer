@@ -89,18 +89,21 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
   server.tool("list_conversations", "List Slack conversations", { types: z.array(z.string()).optional().default(["public_channel"]), limit: z.number().optional().default(100) }, async ({ types, limit }) => {
     const client = new WebClient(auth.slack_token);
     const res = await client.conversations.list({ types: types.join(","), limit });
+    if (!res.ok) return textResult(`Error: ${res.error}`);
     return textResult(res.channels);
   });
 
   server.tool("get_user_info", "Get Slack user info", { userId: z.string() }, async ({ userId }) => {
     const client = new WebClient(auth.slack_token);
     const res = await client.users.info({ user: userId });
+    if (!res.ok) return textResult(`Error: ${res.error}`);
     return textResult(res.user);
   });
 
   server.tool("get_team_info", "Get Slack team info", {}, async () => {
     const client = new WebClient(auth.slack_token);
     const res = await client.team.info();
+    if (!res.ok) return textResult(`Error: ${res.error}`);
     return textResult(res.team);
   });
 
