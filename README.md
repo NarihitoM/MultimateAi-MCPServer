@@ -22,7 +22,7 @@ A comprehensive **Model Context Protocol (MCP)** server deployed on Vercel that 
 ### Connection URL
 
 ```
-https://<your-vercel-deployment>.vercel.app/api/mcp
+https://https://narihito-mcp-server.vercel.app/api/mcp
 ```
 
 ### Configuring AI Clients
@@ -36,9 +36,9 @@ Edit `claude_desktop_config.json`:
 {
   "mcpServers": {
     "multimate": {
-      "url": "https://<your-app>.vercel.app/api/mcp",
+      "url": "https://narihito-mcp-server.vercel.app/api/mcp",
       "headers": {
-        "x-api-key": "your-api-key-if-configured",
+        "x-api-key": "your-api-key-if-configured(Ask Me If You Wanna Try)",
         "x-slack-token": "xoxb-...",
         "x-notion-token": "ntn_...",
         "x-telegram-session": "...",
@@ -63,7 +63,7 @@ Add to your VS Code settings or `.vscode/mcp.json`:
   "servers": {
     "multimate": {
       "type": "url",
-      "url": "https://<your-app>.vercel.app/api/mcp",
+      "url": "https://narihito-mcp-server.vercel.app/api/mcp",
       "headers": {
         "x-api-key": "your-api-key-if-configured",
         "x-slack-token": "xoxb-...",
@@ -82,7 +82,7 @@ In Cursor settings → MCP Servers → Add new:
 
 - **Name:** `multimate`
 - **Type:** `url`
-- **URL:** `https://<your-app>.vercel.app/api/mcp`
+- **URL:** `https://narihito-mcp-server.vercel.app/api/mcp`
 - **Headers:** (as JSON)
 </details>
 
@@ -90,7 +90,8 @@ In Cursor settings → MCP Servers → Add new:
 <summary><b>Claude Code (CLI)</b></summary>
 
 ```bash
-claude mcp add multimate --url https://<your-app>.vercel.app/api/mcp \
+claude mcp add multimate --url https://narihito-mcp-server.vercel.app/api/mcp
+ \
   --header "x-api-key=..." \
   --header "x-slack-token=..."
 ```
