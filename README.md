@@ -177,7 +177,7 @@ Each service requires specific headers. Pass them when connecting your AI client
 
 | Header | Service | How to Get |
 |--------|---------|------------|
-| `x-slack-token` | Slack | Slack App → OAuth & Permissions → Bot User OAuth Token |
+| `x-slack-token` | Slack | Slack App → OAuth & Permissions → User OAuth Token |
 | `x-notion-token` | Notion | Notion Integrations page → Internal Integration Secret |
 | `x-telegram-session` | Telegram | Telegram API session string (from MTProto login) |
 | `x-google-email` | Google APIs | Google Cloud Service Account email |
