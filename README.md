@@ -22,7 +22,7 @@ A comprehensive **Model Context Protocol (MCP)** server deployed on Vercel that 
 ### Connection URL
 
 ```
-https://https://narihito-mcp-server.vercel.app/api/mcp
+https://narihito-mcp-server.vercel.app/api/mcp
 ```
 
 ### Configuring AI Clients
@@ -65,7 +65,7 @@ Add to your VS Code settings or `.vscode/mcp.json`:
       "type": "url",
       "url": "https://narihito-mcp-server.vercel.app/api/mcp",
       "headers": {
-        "x-api-key": "your-api-key-if-configured",
+        "x-api-key": "your-api-key-if-configured(Ask Me If You Wanna Try)",
         "x-slack-token": "xoxb-...",
         "x-notion-token": "ntn_..."
       }
