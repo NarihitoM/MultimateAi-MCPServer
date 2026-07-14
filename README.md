@@ -108,6 +108,8 @@ claude mcp add multimate --url https://narihito-mcp-servers.vercel.app/api/mcp
 | `fetch_message` | Fetch recent messages from a Telegram chat |
 | `fetch_chat_user` | List participants in a Telegram chat |
 | `get_info` | Get info about a Telegram entity |
+| `list_chats` | List all dialogs (users, groups, channels) with their ID, name, and type |
+| `resolve_chat` | Look up a chat by @username to get its numeric ID |
 
 ### Slack
 | Tool | Description |
