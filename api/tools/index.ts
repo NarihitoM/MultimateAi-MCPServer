@@ -77,7 +77,7 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
       await client.connect();
       const dialogs = await client.getDialogs({});
       const chats = dialogs.map((d: any) => {
-        const entity = d.entity;
+        const entity = d.entity as any;
         let type = "user";
         let username = entity?.username || null;
         if (entity?.className?.includes("Channel")) type = "channel";
@@ -100,7 +100,7 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     try {
       await client.connect();
       const clean = username.startsWith("@") ? username.slice(1) : username;
-      const entity = await client.getEntity(clean);
+      const entity = await client.getEntity(clean) as any;
       let type = "user";
       if (entity?.className?.includes("Channel")) type = "channel";
       else if (entity?.className?.includes("Chat")) type = "group";
