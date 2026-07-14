@@ -71,6 +71,51 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     } finally { await client.disconnect(); }
   });
 
+  server.tool("list_chats", "List all Telegram dialogs (users, groups, channels, supergroups) the account is part of. Returns their ID, name, username, and type. Use this to find a chat ID when you only know the name, or to discover available chats.", {}, async () => {
+    const client = makeTelegramClient(auth.telegram_session);
+    try {
+      await client.connect();
+      const dialogs = await client.getDialogs({});
+      const chats = dialogs.map((d: any) => {
+        const entity = d.entity;
+        let type = "user";
+        let username = entity?.username || null;
+        if (entity?.className?.includes("Channel")) type = "channel";
+        else if (entity?.className?.includes("Chat")) type = "group";
+        if (entity?.megagroup) type = "supergroup";
+        return {
+          id: entity?.id?.toString() || d.id?.toString(),
+          title: d.title || entity?.title || `${entity?.firstName || ""} ${entity?.lastName || ""}`.trim() || "Unknown",
+          username,
+          type,
+          unreadCount: d.unreadCount || 0,
+        };
+      });
+      return textResult({ success: true, chats });
+    } finally { await client.disconnect(); }
+  });
+
+  server.tool("resolve_chat", "Resolve a Telegram @username to get its entity ID, title, and type. Use this when you have a chat's public username (e.g. @somegroup) and need its numeric ID for other tools.", { username: z.string().describe("Telegram @username (with or without the @ prefix) to resolve, e.g. 'somegroup' or '@somegroup'") }, async ({ username }) => {
+    const client = makeTelegramClient(auth.telegram_session);
+    try {
+      await client.connect();
+      const clean = username.startsWith("@") ? username.slice(1) : username;
+      const entity = await client.getEntity(clean);
+      let type = "user";
+      if (entity?.className?.includes("Channel")) type = "channel";
+      else if (entity?.className?.includes("Chat")) type = "group";
+      return textResult({
+        success: true,
+        id: entity.id?.toString(),
+        title: entity.title || `${entity.firstName || ""} ${entity.lastName || ""}`.trim() || clean,
+        username: entity.username || clean,
+        type,
+      });
+    } catch (e: any) {
+      return textResult({ success: false, error: `Could not resolve "${username}". Make sure it's a public @username. ${e.message || ""}` });
+    } finally { await client.disconnect(); }
+  });
+
   // ── Slack ──
   server.tool("read_slack_history", "Read message history from a Slack channel. Returns messages with text, timestamps, and user info. Use this to catch up on conversations.", { channelId: z.string().describe("Slack channel ID (e.g. C123456) to read history from"), limit: z.number().optional().default(10).describe("Number of messages to fetch (default 10, max 100)"), oldest: z.string().optional().describe("Only return messages after this Unix timestamp (in seconds)") }, async ({ channelId, limit, oldest }) => {
     const client = new WebClient(auth.slack_token);
