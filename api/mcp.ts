@@ -33,6 +33,8 @@ export default async function handler(req: any, res: any) {
     "X-N8N-URL": req.headers["x-n8n-url"] || "",
     "X-N8N-API-KEY": req.headers["x-n8n-api-key"] || "",
     "X-N8N-Cookie": req.headers["x-n8n-cookie"] || "",
+    github_token: req.headers["x-github-token"] || "",
+    discord_bot_token: req.headers["x-discord-bot-token"] || "",
   };
 
   const server = new McpServer({ name: "multimate-mcp", version: "1.0.0" });

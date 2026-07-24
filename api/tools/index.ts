@@ -457,4 +457,87 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     const creds = (data.data || []).map((c: any) => `${c.id}: ${c.name} (${c.type})`).join("\n");
     return textResult(creds || "No credentials found.");
   });
+
+  // ── GitHub ──
+  const githubFetch = async (path: string, init: RequestInit = {}) => {
+    const res = await fetch(`https://api.github.com${path}`, {
+      ...init,
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${auth.github_token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "MultimateAgent/1.0",
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(init.headers as Record<string, string> | undefined),
+      },
+    });
+    const text = await res.text();
+    let data: any;
+    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    if (!res.ok) throw new Error(`GitHub error (${res.status}): ${JSON.stringify(data)}`);
+    return data;
+  };
+
+  server.tool("list_repos", "List the authenticated user's GitHub repositories.", { per_page: z.number().optional().describe("Max results to return (default 30)") }, async ({ per_page }) => {
+    const data = await githubFetch(`/user/repos?per_page=${per_page || 30}`);
+    return textResult((data as any[]).map((r) => ({ full_name: r.full_name, description: r.description, private: r.private, url: r.html_url })));
+  });
+
+  server.tool("list_issues", "List issues in a GitHub repository.", { owner: z.string().describe("Repository owner/organization name"), repo: z.string().describe("Repository name"), state: z.enum(["open", "closed", "all"]).optional().describe("Filter by issue state (default open)"), per_page: z.number().optional().describe("Max results to return (default 20)") }, async ({ owner, repo, state, per_page }) => {
+    const params = new URLSearchParams({ state: state || "open", per_page: String(per_page || 20) });
+    const data = await githubFetch(`/repos/${owner}/${repo}/issues?${params}`);
+    const issues = (data as any[]).filter((i) => !i.pull_request).map((i) => ({ number: i.number, title: i.title, state: i.state, url: i.html_url }));
+    return textResult(issues);
+  });
+
+  server.tool("create_issue", "Create a new issue in a GitHub repository.", { owner: z.string().describe("Repository owner/organization name"), repo: z.string().describe("Repository name"), title: z.string().describe("Issue title"), body: z.string().optional().describe("Issue body text") }, async ({ owner, repo, title, body }) => {
+    const data = await githubFetch(`/repos/${owner}/${repo}/issues`, { method: "POST", body: JSON.stringify({ title, body }) });
+    return textResult(`Created issue #${data.number}: ${data.html_url}`);
+  });
+
+  server.tool("comment_issue", "Add a comment to an existing GitHub issue.", { owner: z.string().describe("Repository owner/organization name"), repo: z.string().describe("Repository name"), issue_number: z.number().describe("Issue number to comment on"), body: z.string().describe("Comment text") }, async ({ owner, repo, issue_number, body }) => {
+    const data = await githubFetch(`/repos/${owner}/${repo}/issues/${issue_number}/comments`, { method: "POST", body: JSON.stringify({ body }) });
+    return textResult(`Comment added to issue #${issue_number}: ${data.html_url}`);
+  });
+
+  server.tool("list_pull_requests", "List pull requests in a GitHub repository.", { owner: z.string().describe("Repository owner/organization name"), repo: z.string().describe("Repository name"), state: z.enum(["open", "closed", "all"]).optional().describe("Filter by PR state (default open)"), per_page: z.number().optional().describe("Max results to return (default 20)") }, async ({ owner, repo, state, per_page }) => {
+    const params = new URLSearchParams({ state: state || "open", per_page: String(per_page || 20) });
+    const data = await githubFetch(`/repos/${owner}/${repo}/pulls?${params}`);
+    const prs = (data as any[]).map((p) => ({ number: p.number, title: p.title, state: p.state, url: p.html_url }));
+    return textResult(prs);
+  });
+
+  // ── Discord ──
+  const discordFetch = async (path: string, init: RequestInit = {}) => {
+    const res = await fetch(`https://discord.com/api/v10${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bot ${auth.discord_bot_token}`,
+        "User-Agent": "MultimateAgent/1.0",
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(init.headers as Record<string, string> | undefined),
+      },
+    });
+    const text = await res.text();
+    let data: any;
+    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    if (!res.ok) throw new Error(`Discord error (${res.status}): ${JSON.stringify(data)}`);
+    return data;
+  };
+
+  server.tool("list_channels", "List channels in a Discord guild/server.", { guildId: z.string().describe("The ID of the Discord guild/server") }, async ({ guildId }) => {
+    const data = await discordFetch(`/guilds/${guildId}/channels`);
+    return textResult((data as any[]).map((c) => ({ id: c.id, name: c.name, type: c.type })));
+  });
+
+  server.tool("send_message", "Sends a new message to a specific Discord channel.", { channelId: z.string().describe("The ID of the Discord channel"), content: z.string().describe("The content of the message to send") }, async ({ channelId, content }) => {
+    const data = await discordFetch(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content }) });
+    return textResult(`Message sent to channel ${channelId} (id: ${data.id})`);
+  });
+
+  server.tool("read_messages", "Reads previous messages from a specific Discord channel.", { channelId: z.string().describe("The ID of the Discord channel"), limit: z.number().optional().describe("Number of messages to retrieve (default: 20)") }, async ({ channelId, limit }) => {
+    const params = new URLSearchParams({ limit: String(limit || 20) });
+    const data = await discordFetch(`/channels/${channelId}/messages?${params}`);
+    return textResult((data as any[]).map((m) => ({ id: m.id, author: m.author?.username, content: m.content, timestamp: m.timestamp })));
+  });
 }
