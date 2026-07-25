@@ -507,6 +507,18 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     return textResult(prs);
   });
 
+  server.tool("get_profile", "Get the authenticated GitHub user's profile information: username, name, bio, email, follower counts, and account creation date.", {}, async () => {
+    const data = await githubFetch("/user");
+    return textResult({ login: data.login, name: data.name, bio: data.bio, email: data.email, company: data.company, location: data.location, followers: data.followers, following: data.following, public_repos: data.public_repos, created_at: data.created_at, url: data.html_url });
+  });
+
+  server.tool("list_notifications", "List the authenticated user's unread GitHub notifications (issue mentions, PR reviews requested, CI failures, etc.).", { all: z.boolean().optional().describe("If true, includes read notifications too (default: false, unread only)"), per_page: z.number().optional().describe("Max results to return (default 20)") }, async ({ all, per_page }) => {
+    const params = new URLSearchParams({ all: String(all ?? false), per_page: String(per_page || 20) });
+    const data = await githubFetch(`/notifications?${params}`);
+    const notifications = (data as any[]).map((n) => ({ id: n.id, reason: n.reason, title: n.subject?.title, type: n.subject?.type, repo: n.repository?.full_name, unread: n.unread, updated_at: n.updated_at }));
+    return textResult(notifications);
+  });
+
   // ── Discord ──
   const discordFetch = async (path: string, init: RequestInit = {}) => {
     const res = await fetch(`https://discord.com/api/v10${path}`, {
