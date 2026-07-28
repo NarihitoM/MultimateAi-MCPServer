@@ -519,6 +519,15 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     return textResult(notifications);
   });
 
+  server.tool("commit_file", "Create or update a file in a GitHub repository and commit it directly to a branch (no local clone/push needed).", { owner: z.string().describe("Repository owner/organization name"), repo: z.string().describe("Repository name"), path: z.string().describe("File path within the repo, e.g. 'src/index.ts'"), content: z.string().describe("Full new file content (plain text)"), message: z.string().describe("Commit message"), branch: z.string().optional().describe("Branch to commit to (default: repo's default branch)") }, async ({ owner, repo, path, content, message, branch }) => {
+    const existing = await githubFetch(`/repos/${owner}/${repo}/contents/${path}${branch ? `?ref=${branch}` : ""}`).catch(() => null);
+    const data = await githubFetch(`/repos/${owner}/${repo}/contents/${path}`, {
+      method: "PUT",
+      body: JSON.stringify({ message, content: Buffer.from(content, "utf-8").toString("base64"), branch, sha: existing?.sha }),
+    });
+    return textResult(`Committed ${path} to ${owner}/${repo}${branch ? `@${branch}` : ""}: ${data.commit?.html_url}`);
+  });
+
   // ── Discord ──
   const discordFetch = async (path: string, init: RequestInit = {}) => {
     const res = await fetch(`https://discord.com/api/v10${path}`, {
