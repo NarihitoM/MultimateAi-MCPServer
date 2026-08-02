@@ -12,22 +12,23 @@ function makeTelegramClient(session: string) {
   return new TelegramClient(new StringSession(session), Number(process.env.TELEGRAM_API_ID), process.env.TELEGRAM_API_HASH || "", { connectionRetries: 5 });
 }
 
-function getN8nHeaders(auth: Record<string, string>) {
-  const n8nUrl = auth["X-N8N-URL"];
-  if (!n8nUrl) throw new Error("n8n URL not configured.");
-  const headers: Record<string, string> = { "X-N8N-URL": n8nUrl };
-  if (auth["X-N8N-Cookie"]) headers["Cookie"] = auth["X-N8N-Cookie"];
-  if (auth["X-N8N-API-Key"]) headers["X-N8N-API-Key"] = auth["X-N8N-API-Key"];
-  return headers;
+async function withTelegram<T>(session: string, fn: (client: TelegramClient) => Promise<T>): Promise<T> {
+  const client = makeTelegramClient(session);
+  try {
+    await client.connect();
+    return await fn(client);
+  } finally {
+    await client.disconnect();
+  }
 }
 
 async function n8nFetch(auth: Record<string, string>, path: string, options: RequestInit = {}) {
-  const headers = getN8nHeaders(auth);
-  const n8nUrl = headers["X-N8N-URL"];
-  const fetchHeaders: Record<string, string> = { "Content-Type": "application/json" };
-  if (headers["Cookie"]) fetchHeaders["Cookie"] = headers["Cookie"];
-  if (headers["X-N8N-API-Key"]) fetchHeaders["X-N8N-API-Key"] = headers["X-N8N-API-Key"];
-  const response = await fetch(`${n8nUrl}/api/v1${path}`, { ...options, headers: { ...fetchHeaders, ...(options.headers as Record<string, string> || {}) } });
+  const n8nUrl = auth["X-N8N-URL"];
+  if (!n8nUrl) throw new Error("n8n URL not configured.");
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (auth["X-N8N-Cookie"]) headers["Cookie"] = auth["X-N8N-Cookie"];
+  if (auth["X-N8N-API-Key"]) headers["X-N8N-API-Key"] = auth["X-N8N-API-Key"];
+  const response = await fetch(`${n8nUrl}/api/v1${path}`, { ...options, headers: { ...headers, ...(options.headers as Record<string, string> || {}) } });
   if (!response.ok) throw new Error(`n8n API error (${response.status}): ${await response.text()}`);
   return response.json();
 }
@@ -36,45 +37,35 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
 
   // ── Telegram ──
   server.tool("send_message", "Send a Telegram message to a user or group chat by their ID or @username. Requires an active Telegram session.", { userid: z.string().describe("Telegram user ID, group ID, or @username to send the message to"), message: z.string().describe("The text content of the message to send") }, async ({ userid, message }) => {
-    const client = makeTelegramClient(auth.telegram_session);
-    try {
-      await client.connect();
+    return withTelegram(auth.telegram_session, async (client) => {
       await client.sendMessage(userid, { message: `${message}\n\n\n<i>— Sent Via MultimateAIAgent</i>`, parseMode: "html" });
       return textResult({ success: true, to: userid });
-    } finally { await client.disconnect(); }
+    });
   });
 
   server.tool("fetch_message", "Fetch the 20 most recent Telegram messages from a user or group chat. Useful for reading conversation history before responding.", { userid: z.string().describe("Telegram user ID, group ID, or @username to fetch messages from") }, async ({ userid }) => {
-    const client = makeTelegramClient(auth.telegram_session);
-    try {
-      await client.connect();
+    return withTelegram(auth.telegram_session, async (client) => {
       const messages = await client.getMessages(userid, { limit: 20 });
       return textResult({ success: true, to: userid, data: messages.map((m: any) => ({ text: m.message, date: m.date })) });
-    } finally { await client.disconnect(); }
+    });
   });
 
   server.tool("fetch_chat_user", "List all participants in a Telegram group or channel, including their user IDs, names, usernames, and admin status.", { userid: z.string().describe("Telegram group or channel ID to list participants from") }, async ({ userid }) => {
-    const client = makeTelegramClient(auth.telegram_session);
-    try {
-      await client.connect();
+    return withTelegram(auth.telegram_session, async (client) => {
       const participants = await client.getParticipants(userid);
       return textResult({ success: true, data: participants.map((p: any) => ({ userId: p.id?.toString(), fullName: `${p.firstName || ""} ${p.lastName || ""}`.trim(), username: p.username || null, role: p.participant?.className === "ChannelParticipantAdmin" || p.participant?.className === "ChannelParticipantCreator" ? "admin" : "member" })) });
-    } finally { await client.disconnect(); }
+    });
   });
 
   server.tool("get_info", "Get detailed Telegram entity information (user, group, or channel) including their ID, title, username, and access hash.", { userid: z.string().describe("Telegram user ID, group ID, or @username to get info about") }, async ({ userid }) => {
-    const client = makeTelegramClient(auth.telegram_session);
-    try {
-      await client.connect();
+    return withTelegram(auth.telegram_session, async (client) => {
       const info = await client.getEntity(userid);
       return textResult({ success: true, data: info });
-    } finally { await client.disconnect(); }
+    });
   });
 
   server.tool("list_chats", "List all Telegram dialogs (users, groups, channels, supergroups) the account is part of. Returns their ID, name, username, and type. Use this to find a chat ID when you only know the name, or to discover available chats.", {}, async () => {
-    const client = makeTelegramClient(auth.telegram_session);
-    try {
-      await client.connect();
+    return withTelegram(auth.telegram_session, async (client) => {
       const dialogs = await client.getDialogs({});
       const chats = dialogs.map((d: any) => {
         const entity = d.entity as any;
@@ -92,28 +83,28 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
         };
       });
       return textResult({ success: true, chats });
-    } finally { await client.disconnect(); }
+    });
   });
 
   server.tool("resolve_chat", "Resolve a Telegram @username to get its entity ID, title, and type. Use this when you have a chat's public username (e.g. @somegroup) and need its numeric ID for other tools.", { username: z.string().describe("Telegram @username (with or without the @ prefix) to resolve, e.g. 'somegroup' or '@somegroup'") }, async ({ username }) => {
-    const client = makeTelegramClient(auth.telegram_session);
-    try {
-      await client.connect();
-      const clean = username.startsWith("@") ? username.slice(1) : username;
-      const entity = await client.getEntity(clean) as any;
-      let type = "user";
-      if (entity?.className?.includes("Channel")) type = "channel";
-      else if (entity?.className?.includes("Chat")) type = "group";
-      return textResult({
-        success: true,
-        id: entity.id?.toString(),
-        title: entity.title || `${entity.firstName || ""} ${entity.lastName || ""}`.trim() || clean,
-        username: entity.username || clean,
-        type,
-      });
-    } catch (e: any) {
-      return textResult({ success: false, error: `Could not resolve "${username}". Make sure it's a public @username. ${e.message || ""}` });
-    } finally { await client.disconnect(); }
+    return withTelegram(auth.telegram_session, async (client) => {
+      try {
+        const clean = username.startsWith("@") ? username.slice(1) : username;
+        const entity = await client.getEntity(clean) as any;
+        let type = "user";
+        if (entity?.className?.includes("Channel")) type = "channel";
+        else if (entity?.className?.includes("Chat")) type = "group";
+        return textResult({
+          success: true,
+          id: entity.id?.toString(),
+          title: entity.title || `${entity.firstName || ""} ${entity.lastName || ""}`.trim() || clean,
+          username: entity.username || clean,
+          type,
+        });
+      } catch (e: any) {
+        return textResult({ success: false, error: `Could not resolve "${username}". Make sure it's a public @username. ${e.message || ""}` });
+      }
+    });
   });
 
   // ── Slack ──
@@ -459,13 +450,12 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
   });
 
   // ── GitHub ──
-  const githubFetch = async (path: string, init: RequestInit = {}) => {
-    const res = await fetch(`https://api.github.com${path}`, {
+  const apiFetch = async (baseUrl: string, authorization: string, path: string, init: RequestInit = {}, extraHeaders: Record<string, string> = {}) => {
+    const res = await fetch(`${baseUrl}${path}`, {
       ...init,
       headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${auth.github_token}`,
-        "X-GitHub-Api-Version": "2022-11-28",
+        ...extraHeaders,
+        Authorization: authorization,
         "User-Agent": "MultimateAgent/1.0",
         ...(init.body ? { "Content-Type": "application/json" } : {}),
         ...(init.headers as Record<string, string> | undefined),
@@ -474,9 +464,10 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     const text = await res.text();
     let data: any;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-    if (!res.ok) throw new Error(`GitHub error (${res.status}): ${JSON.stringify(data)}`);
+    if (!res.ok) throw new Error(`API error (${res.status}): ${JSON.stringify(data)}`);
     return data;
   };
+  const githubFetch = (path: string, init: RequestInit = {}) => apiFetch("https://api.github.com", `Bearer ${auth.github_token}`, path, init, { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" });
 
   server.tool("list_repos", "List the authenticated user's GitHub repositories.", { per_page: z.number().optional().describe("Max results to return (default 30)") }, async ({ per_page }) => {
     const data = await githubFetch(`/user/repos?per_page=${per_page || 30}`);
@@ -529,22 +520,7 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
   });
 
   // ── Discord ──
-  const discordFetch = async (path: string, init: RequestInit = {}) => {
-    const res = await fetch(`https://discord.com/api/v10${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bot ${auth.discord_bot_token}`,
-        "User-Agent": "MultimateAgent/1.0",
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
-        ...(init.headers as Record<string, string> | undefined),
-      },
-    });
-    const text = await res.text();
-    let data: any;
-    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-    if (!res.ok) throw new Error(`Discord error (${res.status}): ${JSON.stringify(data)}`);
-    return data;
-  };
+  const discordFetch = (path: string, init: RequestInit = {}) => apiFetch("https://discord.com/api/v10", `Bot ${auth.discord_bot_token}`, path, init);
 
   server.tool("discord_list_channels", "List channels in a Discord guild/server.", { guildId: z.string().describe("The ID of the Discord guild/server") }, async ({ guildId }) => {
     const data = await discordFetch(`/guilds/${guildId}/channels`);
