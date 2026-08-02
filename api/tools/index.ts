@@ -556,10 +556,37 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     return textResult(`Message sent to channel ${channelId} (id: ${data.id})`);
   });
 
-  server.tool("discord_read_messages", "Reads previous messages from a specific Discord channel.", { channelId: z.string().describe("The ID of the Discord channel"), limit: z.number().optional().describe("Number of messages to retrieve (default: 20)") }, async ({ channelId, limit }) => {
-    const params = new URLSearchParams({ limit: String(limit || 20) });
+  const DISCORD_MESSAGE_TYPES: Record<number, string> = {
+    1: "Recipient Added", 2: "Recipient Removed", 3: "Call", 4: "Channel Name Changed", 5: "Channel Icon Changed",
+    6: "Message Pinned", 7: "Member Joined", 8: "Server Boost", 9: "Server Boost Tier 1", 10: "Server Boost Tier 2",
+    11: "Server Boost Tier 3", 12: "Channel Follow Added", 13: "Server Discovery Disqualified", 14: "Server Discovery Requalified",
+    15: "Discovery Grace Period Warning", 16: "Discovery Grace Period Final Warning", 18: "Thread Created", 19: "Reply",
+    20: "Slash Command", 21: "Thread Starter Message", 22: "Guild Invite Reminder", 23: "Context Menu Command",
+    24: "Auto Moderation Action", 25: "Role Subscription Purchase", 26: "Interaction Premium Upsell", 27: "Stage Started",
+    28: "Stage Ended", 29: "Stage Speaker", 31: "Member Accepted MFA", 32: "Guild Application Premium Subscription",
+  };
+
+  server.tool("discord_read_messages", "Reads previous messages from a specific Discord channel. Includes attachments, embeds, and stickers so non-text messages are not lost.", { channelId: z.string().describe("The ID of the Discord channel"), limit: z.number().optional().describe("Number of messages to retrieve (default: 20, max 100)") }, async ({ channelId, limit }) => {
+    const params = new URLSearchParams({ limit: String(Math.min(limit || 20, 100)) });
     const data = await discordFetch(`/channels/${channelId}/messages?${params}`);
-    return textResult((data as any[]).map((m) => ({ id: m.id, author: m.author?.username, content: m.content, timestamp: m.timestamp })));
+    return textResult((data as any[]).map((m) => {
+      const parts: string[] = [];
+      if (m.content) parts.push(m.content);
+      if (m.attachments?.length) parts.push(m.attachments.map((a: any) => `[attachment: ${a.filename}${a.url ? ` (${a.url})` : ""}]`).join(", "));
+      if (m.embeds?.length) parts.push(m.embeds.map((e: any) => {
+        const title = e.title || "";
+        const description = e.description || "";
+        const fields = e.fields?.map((f: any) => `${f.name}: ${f.value}`).join(" | ") || "";
+        return `[embed: ${[title, description, fields].filter(Boolean).join(" — ")}]`;
+      }).join(", "));
+      if (m.sticker_items?.length) parts.push(`[stickers: ${m.sticker_items.map((s: any) => s.name || s.id).join(", ")}]`);
+      return {
+        id: m.id,
+        author: m.author?.username || "Unknown",
+        content: parts.join("\n") || `[${DISCORD_MESSAGE_TYPES[m.type] || "system"} message with no text]`,
+        timestamp: m.timestamp,
+      };
+    }));
   });
 
   // ── Viber ──
