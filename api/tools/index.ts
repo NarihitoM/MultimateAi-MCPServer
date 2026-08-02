@@ -546,17 +546,17 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     return data;
   };
 
-  server.tool("list_channels", "List channels in a Discord guild/server.", { guildId: z.string().describe("The ID of the Discord guild/server") }, async ({ guildId }) => {
+  server.tool("discord_list_channels", "List channels in a Discord guild/server.", { guildId: z.string().describe("The ID of the Discord guild/server") }, async ({ guildId }) => {
     const data = await discordFetch(`/guilds/${guildId}/channels`);
     return textResult((data as any[]).map((c) => ({ id: c.id, name: c.name, type: c.type })));
   });
 
-  server.tool("send_message", "Sends a new message to a specific Discord channel.", { channelId: z.string().describe("The ID of the Discord channel"), content: z.string().describe("The content of the message to send") }, async ({ channelId, content }) => {
+  server.tool("discord_send_message", "Sends a new message to a specific Discord channel.", { channelId: z.string().describe("The ID of the Discord channel"), content: z.string().describe("The content of the message to send") }, async ({ channelId, content }) => {
     const data = await discordFetch(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ content }) });
     return textResult(`Message sent to channel ${channelId} (id: ${data.id})`);
   });
 
-  server.tool("read_messages", "Reads previous messages from a specific Discord channel.", { channelId: z.string().describe("The ID of the Discord channel"), limit: z.number().optional().describe("Number of messages to retrieve (default: 20)") }, async ({ channelId, limit }) => {
+  server.tool("discord_read_messages", "Reads previous messages from a specific Discord channel.", { channelId: z.string().describe("The ID of the Discord channel"), limit: z.number().optional().describe("Number of messages to retrieve (default: 20)") }, async ({ channelId, limit }) => {
     const params = new URLSearchParams({ limit: String(limit || 20) });
     const data = await discordFetch(`/channels/${channelId}/messages?${params}`);
     return textResult((data as any[]).map((m) => ({ id: m.id, author: m.author?.username, content: m.content, timestamp: m.timestamp })));
