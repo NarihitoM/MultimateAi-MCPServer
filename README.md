@@ -42,8 +42,7 @@ Edit `claude_desktop_config.json`:
         "x-slack-token": "xoxb-...",
         "x-notion-token": "ntn_...",
         "x-telegram-session": "...",
-        "x-google-email": "...@...iam.gserviceaccount.com",
-        "x-google-key": "-----BEGIN PRIVATE KEY-----\n...",
+        "x-google-access-token": "ya29...",
         "x-n8n-url": "https://...",
         "x-n8n-api-key": "..."
       }
@@ -182,8 +181,7 @@ Each service requires specific headers. Pass them when connecting your AI client
 | `x-slack-token` | Slack | Slack App → OAuth & Permissions → User OAuth Token |
 | `x-notion-token` | Notion | Notion Integrations page → Internal Integration Secret |
 | `x-telegram-session` | Telegram | Telegram API session string (from MTProto login) |
-| `x-google-email` | Google APIs | Google Cloud Service Account email |
-| `x-google-key` | Google APIs | Google Cloud Service Account private key |
+| `x-google-access-token` | Google APIs | OAuth 2.0 access token (short-lived, scoped to spreadsheets/drive/documents) |
 | `x-n8n-url` | n8n | Your n8n instance base URL (e.g. `https://n8n.example.com`) |
 | `x-n8n-api-key` | n8n | n8n API key (alternative to cookie auth) |
 | `x-n8n-cookie` | n8n | n8n session cookie (alternative to API key) |

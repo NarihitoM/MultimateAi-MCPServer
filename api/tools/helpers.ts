@@ -4,12 +4,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 export type { McpServer };
 export type ToolRegistrar = (server: McpServer, auth: Record<string, string>) => void;
 
-export function createGoogleAuth(email: string, key: string) {
-  return new google.auth.JWT({
-    email,
-    key: key.replace(/\\n/g, "\n").replace(/\r/g, "").replace(/['"]+/g, "").replace(/^[ \t]+|[ \t]+$/gm, "").trim(),
-    scopes: ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/documents"],
-  });
+export function createGoogleAuthFromToken(accessToken: string) {
+  const auth = new google.auth.OAuth2();
+  auth.setCredentials({ access_token: accessToken });
+  return auth;
 }
 
 export function normalizeBlock(block: any): any {

@@ -6,7 +6,7 @@ import { Client as NotionClient } from "@notionhq/client";
 import { google } from "googleapis";
 import { firecrawl } from "../lib/firecrawl.js";
 import type { McpServer } from "./helpers.js";
-import { createGoogleAuth, normalizeBlock, textResult } from "./helpers.js";
+import { createGoogleAuthFromToken, normalizeBlock, textResult } from "./helpers.js";
 
 function makeTelegramClient(session: string) {
   return new TelegramClient(new StringSession(session), Number(process.env.TELEGRAM_API_ID), process.env.TELEGRAM_API_HASH || "", { connectionRetries: 5 });
@@ -221,7 +221,7 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
   });
 
   // ── Google Sheets ──
-  const sheetsApi = () => google.sheets({ version: "v4", auth: createGoogleAuth(auth.GOOGLE_EMAIL!, auth.GOOGLE_KEY!) });
+  const sheetsApi = () => google.sheets({ version: "v4", auth: createGoogleAuthFromToken(auth.GOOGLE_ACCESS_TOKEN!) });
 
   server.tool("google_sheets_read", "Read data from a Google Sheet by spreadsheet ID and range. Returns the cell values as a 2D array. Use this to view sheet contents.", { spreadsheet_id: z.string().describe("Google Spreadsheet ID (from the sheet's URL)"), range: z.string().optional().default("Sheet1!A1:Z100").describe("A1 notation range (e.g. 'Sheet1!A1:Z100' or 'MySheet!A1:C10')") }, async ({ spreadsheet_id, range }) => {
     const sheets = sheetsApi();
@@ -266,11 +266,11 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
   });
 
   // ── Google Docs ──
-  const docsApi = () => google.docs({ version: "v1", auth: createGoogleAuth(auth.GOOGLE_EMAIL!, auth.GOOGLE_KEY!) });
-  const driveApi = () => google.drive({ version: "v3", auth: createGoogleAuth(auth.GOOGLE_EMAIL!, auth.GOOGLE_KEY!) });
+  const docsApi = () => google.docs({ version: "v1", auth: createGoogleAuthFromToken(auth.GOOGLE_ACCESS_TOKEN!) });
+  const driveApi = () => google.drive({ version: "v3", auth: createGoogleAuthFromToken(auth.GOOGLE_ACCESS_TOKEN!) });
 
   server.tool("google_docs_create", "Create a new Google Doc in Google Drive. Optionally include initial text content. Returns the document ID and URL.", { title: z.string().describe("Title of the new Google Doc"), content: z.string().optional().describe("Optional initial text content to insert into the document") }, async ({ title, content }) => {
-    const gAuth = createGoogleAuth(auth.GOOGLE_EMAIL!, auth.GOOGLE_KEY!);
+    const gAuth = createGoogleAuthFromToken(auth.GOOGLE_ACCESS_TOKEN!);
     const drive = google.drive({ version: "v3", auth: gAuth });
     const file = await drive.files.create({ requestBody: { name: title, mimeType: "application/vnd.google-apps.document" }, fields: "id,webViewLink" });
     const documentId = file.data.id!;
