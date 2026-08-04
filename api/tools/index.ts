@@ -564,17 +564,4 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
       };
     }));
   });
-
-  // ── Viber ──
-  // Viber's Bot API is push-only (no REST endpoint to read chat history), so only sending is exposed here.
-  server.tool("send_viber_message", "Sends a text message to a Viber user who has subscribed to the bot.", { viberUserId: z.string().describe("The Viber subscriber's user ID to send the message to"), text: z.string().describe("The content of the message to send"), senderName: z.string().optional().default("Multimate").describe("Display name shown as the message sender") }, async ({ viberUserId, text, senderName }) => {
-    const res = await fetch("https://chatapi.viber.com/pa/send_message", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Viber-Auth-Token": auth.viber_bot_token },
-      body: JSON.stringify({ receiver: viberUserId, type: "text", sender: { name: senderName }, text }),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || (data && data.status !== 0)) return textResult(`Error: Failed to send Viber message. ${data ? JSON.stringify(data) : res.statusText}`);
-    return textResult("Message sent successfully.");
-  });
 }
