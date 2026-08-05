@@ -148,6 +148,14 @@ claude mcp add multimate --url https://narihito-mcp-servers.vercel.app/api/mcp
 | `google_docs_delete_file` | Permanently delete a Google Doc |
 | `google_docs_edit` | Edit a Google Doc with content blocks & formatting |
 
+### Google Calendar
+| Tool | Description |
+|------|-------------|
+| `google_calendar_list_events` | List upcoming events in a time range |
+| `google_calendar_create_event` | Create a new calendar event |
+| `google_calendar_update_event` | Update an existing calendar event |
+| `google_calendar_delete_event` | Permanently delete a calendar event |
+
 ### Web
 | Tool | Description |
 |------|-------------|

@@ -362,6 +362,81 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     return textResult("Document operation completed successfully.");
   });
 
+  // ── Google Calendar ──
+  const calendarApi = () => google.calendar({ version: "v3", auth: createGoogleAuthFromToken(auth.GOOGLE_ACCESS_TOKEN!) });
+
+  server.tool("google_calendar_list_events", "List upcoming events on a Google Calendar within a time range. Returns event IDs, titles, start/end times, and locations.", {
+    calendar_id: z.string().default("primary").describe("Calendar ID to read from, or 'primary' for the user's main calendar"),
+    time_min: z.string().optional().describe("ISO 8601 start of range (defaults to now)"),
+    time_max: z.string().optional().describe("ISO 8601 end of range"),
+    max_results: z.number().optional().default(20).describe("Max number of events to return"),
+  }, async ({ calendar_id, time_min, time_max, max_results }) => {
+    const res = await calendarApi().events.list({
+      calendarId: calendar_id,
+      timeMin: time_min || new Date().toISOString(),
+      timeMax: time_max,
+      maxResults: max_results,
+      singleEvents: true,
+      orderBy: "startTime",
+    });
+    const events = (res.data.items || []).map((e) => `${e.id}: ${e.summary} (${e.start?.dateTime || e.start?.date} - ${e.end?.dateTime || e.end?.date})${e.location ? ` @ ${e.location}` : ""}`);
+    return textResult(events.join("\n") || "No events found.");
+  });
+
+  server.tool("google_calendar_create_event", "Create a new event on a Google Calendar. Returns the created event ID and link.", {
+    calendar_id: z.string().default("primary").describe("Calendar ID to add the event to, or 'primary'"),
+    summary: z.string().describe("Event title"),
+    start: z.string().describe("ISO 8601 start datetime (e.g. 2026-08-10T14:00:00-07:00)"),
+    end: z.string().describe("ISO 8601 end datetime"),
+    description: z.string().optional().describe("Optional event description"),
+    location: z.string().optional().describe("Optional event location"),
+    attendees: z.array(z.string()).optional().describe("Optional list of attendee email addresses"),
+  }, async ({ calendar_id, summary, start, end, description, location, attendees }) => {
+    const res = await calendarApi().events.insert({
+      calendarId: calendar_id,
+      requestBody: {
+        summary,
+        description,
+        location,
+        start: { dateTime: start },
+        end: { dateTime: end },
+        attendees: attendees?.map((email) => ({ email })),
+      },
+    });
+    return textResult(`Created event ${res.data.id}: ${res.data.htmlLink}`);
+  });
+
+  server.tool("google_calendar_update_event", "Update an existing Google Calendar event's fields. Only provided fields are changed.", {
+    calendar_id: z.string().default("primary").describe("Calendar ID the event belongs to, or 'primary'"),
+    event_id: z.string().describe("ID of the event to update"),
+    summary: z.string().optional().describe("New title"),
+    start: z.string().optional().describe("New ISO 8601 start datetime"),
+    end: z.string().optional().describe("New ISO 8601 end datetime"),
+    description: z.string().optional().describe("New description"),
+    location: z.string().optional().describe("New location"),
+  }, async ({ calendar_id, event_id, summary, start, end, description, location }) => {
+    const res = await calendarApi().events.patch({
+      calendarId: calendar_id,
+      eventId: event_id,
+      requestBody: {
+        summary,
+        description,
+        location,
+        start: start ? { dateTime: start } : undefined,
+        end: end ? { dateTime: end } : undefined,
+      },
+    });
+    return textResult(`Updated event ${res.data.id}: ${res.data.htmlLink}`);
+  });
+
+  server.tool("google_calendar_delete_event", "Permanently delete an event from a Google Calendar. This action cannot be undone.", {
+    calendar_id: z.string().default("primary").describe("Calendar ID the event belongs to, or 'primary'"),
+    event_id: z.string().describe("ID of the event to delete"),
+  }, async ({ calendar_id, event_id }) => {
+    await calendarApi().events.delete({ calendarId: calendar_id, eventId: event_id });
+    return textResult(`Deleted event ${event_id}.`);
+  });
+
   // ── Web Search & Scrape ──
   server.tool("web_search", "Search the web using Google via Firecrawl. Returns up to 3 search results with titles and descriptions. Use this for real-time information, research, or finding URLs to scrape.", { query: z.string().describe("The search query string (same as you'd type into Google)") }, async ({ query }) => {
     const results = await firecrawl.search(query, { limit: 3 }) as any;
