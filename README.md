@@ -8,6 +8,7 @@ A comprehensive **Model Context Protocol (MCP)** server deployed on Vercel that 
 - **Google Sheets** — Read, edit, create, append, delete sheets
 - **Google Docs** — Create, read, edit, delete documents
 - **Google Calendar** — List, create, update, delete events
+- **Gmail** — List, read, send messages
 - **Web Search & Scrape** — Search Google, scrape web pages (via Firecrawl)
 - **n8n** — List, create, update, delete, trigger workflows & executions
 
@@ -157,6 +158,13 @@ claude mcp add multimate --url https://narihito-mcp-servers.vercel.app/api/mcp
 | `google_calendar_update_event` | Update an existing calendar event |
 | `google_calendar_delete_event` | Permanently delete a calendar event |
 
+### Gmail
+| Tool | Description |
+|------|-------------|
+| `gmail_list_messages` | List messages matching a search query |
+| `gmail_read_message` | Read the full content of a message by ID |
+| `gmail_send_message` | Send a message |
+
 ### Web
 | Tool | Description |
 |------|-------------|
@@ -190,7 +198,7 @@ Each service requires specific headers. Pass them when connecting your AI client
 | `x-slack-token` | Slack | Slack App → OAuth & Permissions → User OAuth Token |
 | `x-notion-token` | Notion | Notion Integrations page → Internal Integration Secret |
 | `x-telegram-session` | Telegram | Telegram API session string (from MTProto login) |
-| `x-google-access-token` | Google APIs | OAuth 2.0 access token (short-lived, scoped to spreadsheets/drive/documents/calendar) |
+| `x-google-access-token` | Google APIs | OAuth 2.0 access token (short-lived, scoped to spreadsheets/drive/documents/calendar/gmail) |
 | `x-n8n-url` | n8n | Your n8n instance base URL (e.g. `https://n8n.example.com`) |
 | `x-n8n-api-key` | n8n | n8n API key (alternative to cookie auth) |
 | `x-n8n-cookie` | n8n | n8n session cookie (alternative to API key) |
