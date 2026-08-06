@@ -437,6 +437,63 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     return textResult(`Deleted event ${event_id}.`);
   });
 
+  // ── Gmail ──
+  const gmailApi = () => google.gmail({ version: "v1", auth: createGoogleAuthFromToken(auth.GOOGLE_ACCESS_TOKEN!) });
+
+  const decodeGmailBody = (payload: any): string => {
+    const findPart = (part: any): string | null => {
+      if (part?.mimeType === "text/plain" && part.body?.data) return part.body.data;
+      if (part?.parts) {
+        for (const p of part.parts) {
+          const found = findPart(p);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    const data = findPart(payload) || payload?.body?.data;
+    if (!data) return "";
+    return Buffer.from(data, "base64url").toString("utf-8");
+  };
+
+  server.tool("gmail_list_messages", "List Gmail messages matching a search query. Returns message IDs, subjects, senders, and snippets.", {
+    query: z.string().optional().describe("Gmail search query (e.g. 'from:boss@company.com is:unread'). Omit for the most recent messages."),
+    max_results: z.number().optional().default(10).describe("Max number of messages to return"),
+  }, async ({ query, max_results }) => {
+    const list = await gmailApi().users.messages.list({ userId: "me", q: query, maxResults: max_results });
+    const ids = list.data.messages || [];
+    if (ids.length === 0) return textResult("No messages found.");
+    const details = await Promise.all(ids.map((m) => gmailApi().users.messages.get({ userId: "me", id: m.id!, format: "metadata", metadataHeaders: ["Subject", "From", "Date"] })));
+    const lines = details.map((d) => {
+      const headers = d.data.payload?.headers || [];
+      const get = (name: string) => headers.find((h) => h.name === name)?.value || "";
+      return `${d.data.id}: [${get("From")}] ${get("Subject")} (${get("Date")}) - ${d.data.snippet}`;
+    });
+    return textResult(lines.join("\n"));
+  });
+
+  server.tool("gmail_read_message", "Read the full content of a single Gmail message by ID.", {
+    message_id: z.string().describe("Gmail message ID, from gmail_list_messages"),
+  }, async ({ message_id }) => {
+    const res = await gmailApi().users.messages.get({ userId: "me", id: message_id, format: "full" });
+    const headers = res.data.payload?.headers || [];
+    const get = (name: string) => headers.find((h) => h.name === name)?.value || "";
+    const body = decodeGmailBody(res.data.payload);
+    return textResult(`From: ${get("From")}\nTo: ${get("To")}\nSubject: ${get("Subject")}\nDate: ${get("Date")}\n\n${body}`);
+  });
+
+  server.tool("gmail_send_message", "Send a Gmail message.", {
+    to: z.string().describe("Recipient email address"),
+    subject: z.string().describe("Email subject"),
+    body: z.string().describe("Email body (plain text)"),
+    cc: z.string().optional().describe("Optional CC email address"),
+  }, async ({ to, subject, body, cc }) => {
+    const headers = [`To: ${to}`, cc ? `Cc: ${cc}` : null, `Subject: ${subject}`, "Content-Type: text/plain; charset=utf-8"].filter(Boolean).join("\r\n");
+    const raw = Buffer.from(`${headers}\r\n\r\n${body}`).toString("base64url");
+    const res = await gmailApi().users.messages.send({ userId: "me", requestBody: { raw } });
+    return textResult(`Sent message ${res.data.id} to ${to}.`);
+  });
+
   // ── Web Search & Scrape ──
   server.tool("web_search", "Search the web using Google via Firecrawl. Returns up to 3 search results with titles and descriptions. Use this for real-time information, research, or finding URLs to scrape.", { query: z.string().describe("The search query string (same as you'd type into Google)") }, async ({ query }) => {
     const results = await firecrawl.search(query, { limit: 3 }) as any;
