@@ -494,6 +494,36 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     return textResult(`Sent message ${res.data.id} to ${to}.`);
   });
 
+  server.tool("gmail_reply_message", "Reply to an existing Gmail message, staying in the same thread.", {
+    message_id: z.string().describe("ID of the message to reply to, from gmail_list_messages or gmail_read_message"),
+    body: z.string().describe("Reply body (plain text)"),
+    reply_all: z.boolean().optional().default(false).describe("Also CC everyone else on the original message"),
+  }, async ({ message_id, body, reply_all }) => {
+    const original = await gmailApi().users.messages.get({ userId: "me", id: message_id, format: "metadata", metadataHeaders: ["Subject", "From", "To", "Cc", "Message-ID", "References"] });
+    const headers = original.data.payload?.headers || [];
+    const get = (name: string) => headers.find((h) => h.name === name)?.value || "";
+
+    const originalSubject = get("Subject");
+    const subject = /^re:/i.test(originalSubject) ? originalSubject : `Re: ${originalSubject}`;
+    const messageId = get("Message-ID");
+    const references = [get("References"), messageId].filter(Boolean).join(" ");
+
+    const toHeader = [`To: ${get("From")}`];
+    if (reply_all && get("To")) toHeader.push(`Cc: ${[get("To"), get("Cc")].filter(Boolean).join(", ")}`);
+
+    const rawHeaders = [
+      ...toHeader,
+      `Subject: ${subject}`,
+      messageId ? `In-Reply-To: ${messageId}` : null,
+      references ? `References: ${references}` : null,
+      "Content-Type: text/plain; charset=utf-8",
+    ].filter(Boolean).join("\r\n");
+
+    const raw = Buffer.from(`${rawHeaders}\r\n\r\n${body}`).toString("base64url");
+    const res = await gmailApi().users.messages.send({ userId: "me", requestBody: { raw, threadId: original.data.threadId! } });
+    return textResult(`Replied with message ${res.data.id} in thread ${original.data.threadId}.`);
+  });
+
   // ── Web Search & Scrape ──
   server.tool("web_search", "Search the web using Google via Firecrawl. Returns up to 3 search results with titles and descriptions. Use this for real-time information, research, or finding URLs to scrape.", { query: z.string().describe("The search query string (same as you'd type into Google)") }, async ({ query }) => {
     const results = await firecrawl.search(query, { limit: 3 }) as any;
