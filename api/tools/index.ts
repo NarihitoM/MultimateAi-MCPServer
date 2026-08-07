@@ -222,6 +222,58 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
 
   // ── Google Sheets ──
   const sheetsApi = () => google.sheets({ version: "v4", auth: createGoogleAuthFromToken(auth.GOOGLE_ACCESS_TOKEN!) });
+  const cleanSheetName = (rangeOrName: string) => {
+    const rawName = rangeOrName.includes("!") ? rangeOrName.split("!")[0] : rangeOrName;
+    return rawName.replace(/^'|'$/g, "").replace(/''/g, "'");
+  };
+  const quoteSheetName = (sheetName: string) => `'${sheetName.replace(/'/g, "''")}'`;
+  const maxColumnCount = (values: any[][]) => Math.max(1, ...values.map((row) => row.length));
+  const beautifySheet = async (sheets: ReturnType<typeof sheetsApi>, spreadsheetId: string, sheetName: string, values: any[][]) => {
+    if (values.length === 0) return;
+
+    const meta = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheet = meta.data.sheets?.find((s: any) => s.properties?.title === sheetName);
+    const sheetId = sheet?.properties?.sheetId;
+    if (sheetId === undefined || sheetId === null) return;
+
+    const columnCount = maxColumnCount(values);
+    const rowCount = Math.max(1, values.length);
+    const border = { style: "SOLID" as const, width: 1, color: { red: 0.86, green: 0.89, blue: 0.93 } };
+    const existingBandingRequests = (sheet.bandedRanges || []).map((banding: any) => ({ deleteBanding: { bandedRangeId: banding.bandedRangeId } }));
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          ...existingBandingRequests,
+          { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } },
+          {
+            repeatCell: {
+              range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: columnCount },
+              cell: { userEnteredFormat: { backgroundColor: { red: 0.09, green: 0.19, blue: 0.34 }, horizontalAlignment: "CENTER", verticalAlignment: "MIDDLE", textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } }, wrapStrategy: "WRAP" } },
+              fields: "userEnteredFormat(backgroundColor,horizontalAlignment,verticalAlignment,textFormat,wrapStrategy)",
+            },
+          },
+          {
+            repeatCell: {
+              range: { sheetId, startRowIndex: 1, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: columnCount },
+              cell: { userEnteredFormat: { verticalAlignment: "MIDDLE", wrapStrategy: "WRAP" } },
+              fields: "userEnteredFormat(verticalAlignment,wrapStrategy)",
+            },
+          },
+          {
+            addBanding: {
+              bandedRange: {
+                range: { sheetId, startRowIndex: 0, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: columnCount },
+                rowProperties: { headerColor: { red: 0.09, green: 0.19, blue: 0.34 }, firstBandColor: { red: 1, green: 1, blue: 1 }, secondBandColor: { red: 0.95, green: 0.97, blue: 0.99 } },
+              },
+            },
+          },
+          { updateBorders: { range: { sheetId, startRowIndex: 0, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: columnCount }, top: border, bottom: border, left: border, right: border, innerHorizontal: border, innerVertical: border } },
+          { autoResizeDimensions: { dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: columnCount } } },
+        ],
+      },
+    });
+  };
 
   server.tool("google_sheets_read", "Read data from a Google Sheet by spreadsheet ID and range. Returns the cell values as a 2D array. Use this to view sheet contents.", { spreadsheet_id: z.string().describe("Google Spreadsheet ID (from the sheet's URL)"), range: z.string().optional().default("Sheet1!A1:Z100").describe("A1 notation range (e.g. 'Sheet1!A1:Z100' or 'MySheet!A1:C10')") }, async ({ spreadsheet_id, range }) => {
     const sheets = sheetsApi();
@@ -230,14 +282,10 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     return textResult(result);
   });
 
-  server.tool("google_sheets_edit", "Edit/replace cell values in a Google Sheet at a specified range. Also auto-bolds the header row. Use this to update existing data.", { spreadsheet_id: z.string().describe("Google Spreadsheet ID"), range: z.string().describe("A1 notation range to edit (e.g. 'Sheet1!A1:C10')"), values: z.array(z.array(z.any())).describe("2D array of values to write. Each inner array is a row. Example: [['Name', 'Age'], ['Alice', 30]]") }, async ({ spreadsheet_id, range, values }) => {
+  server.tool("google_sheets_edit", "Edit/replace cell values in a Google Sheet at a specified range. Applies polished table formatting: bold colored header, frozen top row, alternating row colors, borders, wrapping, and auto-sized columns.", { spreadsheet_id: z.string().describe("Google Spreadsheet ID"), range: z.string().describe("A1 notation range to edit (e.g. 'Sheet1!A1:C10')"), values: z.array(z.array(z.any())).describe("2D array of values to write. Each inner array is a row. Example: [['Name', 'Age'], ['Alice', 30]]") }, async ({ spreadsheet_id, range, values }) => {
     const sheets = sheetsApi();
     const res = await sheets.spreadsheets.values.update({ spreadsheetId: spreadsheet_id, range, valueInputOption: "USER_ENTERED", requestBody: { values } });
-    const meta = await sheets.spreadsheets.get({ spreadsheetId: spreadsheet_id });
-    const sheetName = range.split("!")[0];
-    const sheet = meta.data.sheets?.find((s: any) => s.properties?.title === sheetName);
-    const sheetId = sheet?.properties?.sheetId;
-    await sheets.spreadsheets.batchUpdate({ spreadsheetId: spreadsheet_id, requestBody: { requests: [{ repeatCell: { range: { sheetId, startRowIndex: 0, endRowIndex: 1 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: "userEnteredFormat.textFormat.bold" } }] } });
+    await beautifySheet(sheets, spreadsheet_id, cleanSheetName(range), values);
     return textResult(`Updated ${res.data.updatedCells} cells in range ${res.data.updatedRange}.`);
   });
 
@@ -259,9 +307,12 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     return textResult({ success: true, message: `Sheet "${title}" added` });
   });
 
-  server.tool("google_sheets_append", "Append new rows to the bottom of a Google Sheet. Unlike edit, this adds rows at the end. Great for logging data.", { spreadsheet_id: z.string().describe("Google Spreadsheet ID"), sheet_name: z.string().describe("Sheet tab name to append to (e.g. 'Sheet1')"), values: z.array(z.array(z.any())).describe("2D array of row data to append. Example: [['Alice', 30, 'Engineer'], ['Bob', 25, 'Designer']]") }, async ({ spreadsheet_id, sheet_name, values }) => {
+  server.tool("google_sheets_append", "Append new rows to the bottom of a Google Sheet. Applies polished table formatting after the append, including frozen header, alternating row colors, borders, wrapping, and auto-sized columns.", { spreadsheet_id: z.string().describe("Google Spreadsheet ID"), sheet_name: z.string().describe("Sheet tab name to append to (e.g. 'Sheet1')"), values: z.array(z.array(z.any())).describe("2D array of row data to append. Example: [['Alice', 30, 'Engineer'], ['Bob', 25, 'Designer']]") }, async ({ spreadsheet_id, sheet_name, values }) => {
     const sheets = sheetsApi();
-    const res = await sheets.spreadsheets.values.append({ spreadsheetId: spreadsheet_id, range: `${sheet_name}!A1`, valueInputOption: "USER_ENTERED", insertDataOption: "INSERT_ROWS", requestBody: { values } });
+    const quotedSheetName = quoteSheetName(sheet_name);
+    const res = await sheets.spreadsheets.values.append({ spreadsheetId: spreadsheet_id, range: `${quotedSheetName}!A1`, valueInputOption: "USER_ENTERED", insertDataOption: "INSERT_ROWS", requestBody: { values } });
+    const allValues = await sheets.spreadsheets.values.get({ spreadsheetId: spreadsheet_id, range: `${quotedSheetName}!A1:ZZ10000` });
+    await beautifySheet(sheets, spreadsheet_id, sheet_name, allValues.data.values || values);
     return textResult(`Appended data to: ${res.data.updates?.updatedRange}`);
   });
 
@@ -304,7 +355,6 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     const docs = docsApi();
     const doc = await docs.documents.get({ documentId: document_id });
     const bodyContent = doc.data?.body?.content || [];
-    let currentDocEndIndex = bodyContent.length > 0 ? (bodyContent[bodyContent.length - 1].endIndex || 1) - 1 : 1;
     const requests: any[] = [];
     let nextBulletStartIndex: number | null = null;
     let nextBulletPreset: string | null = null;
@@ -313,20 +363,32 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
       requests.push({ updateDocumentStyle: { documentStyle: { marginTop: { magnitude: margin_settings.top || 72, unit: "PT" }, marginBottom: { magnitude: margin_settings.bottom || 72, unit: "PT" }, marginLeft: { magnitude: margin_settings.left || 72, unit: "PT" }, marginRight: { magnitude: margin_settings.right || 72, unit: "PT" } }, fields: "marginTop,marginBottom,marginLeft,marginRight" } });
     }
 
+    // Running end-of-document index, advanced after every block so blocks
+    // that don't specify their own startIndex/endIndex (the common case —
+    // the AI just sends an ordered array of paragraphs to append) land one
+    // after another instead of all overwriting the same stale position.
+    let cursor = bodyContent.length > 0 ? (bodyContent[bodyContent.length - 1].endIndex || 1) - 1 : 1;
+
     for (const block of content_blocks) {
-      let start = block.startIndex ?? currentDocEndIndex;
+      let start = block.startIndex ?? cursor;
       if (start <= 0) start = 1;
-      let end = block.endIndex ?? currentDocEndIndex;
+      let end = block.endIndex ?? cursor;
       const textToInsert = (block.text || "") + (block.operation === "CREATE" ? "\n" : "");
+      let deletedLength = 0;
+      let insertedLength = 0;
 
       if (block.operation === "DELETE" || block.operation === "UPDATE") {
-        const safeEnd = end >= currentDocEndIndex ? currentDocEndIndex : end;
-        if (start < safeEnd) requests.push({ deleteContentRange: { range: { startIndex: start, endIndex: safeEnd } } });
+        const safeEnd = end >= cursor ? cursor : end;
+        if (start < safeEnd) {
+          requests.push({ deleteContentRange: { range: { startIndex: start, endIndex: safeEnd } } });
+          deletedLength = safeEnd - start;
+        }
       }
 
       if (block.operation !== "DELETE") {
         requests.push({ insertText: { location: { index: start }, text: textToInsert } });
-        const newEnd = start + textToInsert.length;
+        insertedLength = textToInsert.length;
+        const newEnd = start + insertedLength;
         const textFields: string[] = [];
         if (block.fontFamily) textFields.push("weightedFontFamily");
         if (block.fontSize) textFields.push("fontSize");
@@ -351,11 +413,11 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
           nextBulletPreset = null;
         }
       }
+
+      cursor += insertedLength - deletedLength;
     }
     if (nextBulletStartIndex !== null) {
-      const lastBlock = content_blocks[content_blocks.length - 1];
-      const lastEnd = lastBlock ? (lastBlock.startIndex ?? currentDocEndIndex) + (lastBlock.text || "").length : currentDocEndIndex;
-      requests.push({ createParagraphBullets: { range: { startIndex: nextBulletStartIndex, endIndex: lastEnd }, bulletPreset: nextBulletPreset === "numbered" ? "NUMBERED_DECIMAL_ALPHA_ROMAN" : "BULLET_DASHED_CIRCLE_SQUARE" } });
+      requests.push({ createParagraphBullets: { range: { startIndex: nextBulletStartIndex, endIndex: cursor }, bulletPreset: nextBulletPreset === "numbered" ? "NUMBERED_DECIMAL_ALPHA_ROMAN" : "BULLET_DASHED_CIRCLE_SQUARE" } });
     }
 
     await docs.documents.batchUpdate({ documentId: document_id, requestBody: { requests } });
