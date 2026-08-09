@@ -326,7 +326,12 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     const file = await drive.files.create({ requestBody: { name: title, mimeType: "application/vnd.google-apps.document" }, fields: "id,webViewLink" });
     const documentId = file.data.id!;
     if (content) {
-      await google.docs({ version: "v1", auth: gAuth }).documents.batchUpdate({ documentId, requestBody: { requests: [{ insertText: { location: { index: 1 }, text: content } }] } });
+      const endIndex = 1 + content.length;
+      await google.docs({ version: "v1", auth: gAuth }).documents.batchUpdate({ documentId, requestBody: { requests: [
+        { insertText: { location: { index: 1 }, text: content } },
+        { updateTextStyle: { range: { startIndex: 1, endIndex }, textStyle: { weightedFontFamily: { fontFamily: "Georgia" } }, fields: "weightedFontFamily" } },
+        { updateParagraphStyle: { range: { startIndex: 1, endIndex }, paragraphStyle: { lineSpacing: 115, spaceAbove: { magnitude: 0, unit: "PT" }, spaceBelow: { magnitude: 12, unit: "PT" } }, fields: "lineSpacing,spaceAbove,spaceBelow" } },
+      ] } });
     }
     return textResult({ success: true, documentId, url: file.data.webViewLink });
   });
@@ -389,21 +394,25 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
         requests.push({ insertText: { location: { index: start }, text: textToInsert } });
         insertedLength = textToInsert.length;
         const newEnd = start + insertedLength;
-        const textFields: string[] = [];
-        if (block.fontFamily) textFields.push("weightedFontFamily");
+        // Default to a professional serif look with real paragraph spacing
+        // when the caller doesn't specify — otherwise blocks land in Docs'
+        // bare default (Arial, zero spacing) and read as unformatted.
+        const fontFamily = block.fontFamily ?? "Georgia";
+        const spaceAbove = block.spaceAbove ?? 0;
+        const spaceBelow = block.spaceBelow ?? 12;
+        const lineSpacing = block.lineSpacing ?? 115;
+
+        const textFields = ["weightedFontFamily"];
         if (block.fontSize) textFields.push("fontSize");
         if (block.bold !== undefined) textFields.push("bold");
         if (block.italic !== undefined) textFields.push("italic");
         if (block.color) textFields.push("foregroundColor");
-        if (textFields.length > 0) requests.push({ updateTextStyle: { range: { startIndex: start, endIndex: newEnd }, textStyle: { weightedFontFamily: block.fontFamily ? { fontFamily: block.fontFamily } : undefined, fontSize: block.fontSize ? { magnitude: block.fontSize, unit: "PT" } : undefined, bold: block.bold, italic: block.italic, foregroundColor: block.color ? { color: { rgbColor: block.color } } : undefined }, fields: textFields.join(",") } });
+        requests.push({ updateTextStyle: { range: { startIndex: start, endIndex: newEnd }, textStyle: { weightedFontFamily: { fontFamily }, fontSize: block.fontSize ? { magnitude: block.fontSize, unit: "PT" } : undefined, bold: block.bold, italic: block.italic, foregroundColor: block.color ? { color: { rgbColor: block.color } } : undefined }, fields: textFields.join(",") } });
 
-        const paraFields: string[] = [];
+        const paraFields = ["lineSpacing", "spaceAbove", "spaceBelow"];
         if (block.alignment) paraFields.push("alignment");
-        if (block.lineSpacing) paraFields.push("lineSpacing");
-        if (block.spaceAbove !== undefined) paraFields.push("spaceAbove");
-        if (block.spaceBelow !== undefined) paraFields.push("spaceBelow");
         if (block.namedStyleType) paraFields.push("namedStyleType");
-        if (paraFields.length > 0) requests.push({ updateParagraphStyle: { range: { startIndex: start, endIndex: newEnd }, paragraphStyle: { alignment: block.alignment, lineSpacing: block.lineSpacing, spaceAbove: block.spaceAbove ? { magnitude: block.spaceAbove, unit: "PT" } : undefined, spaceBelow: block.spaceBelow ? { magnitude: block.spaceBelow, unit: "PT" } : undefined, namedStyleType: block.namedStyleType }, fields: paraFields.join(",") } });
+        requests.push({ updateParagraphStyle: { range: { startIndex: start, endIndex: newEnd }, paragraphStyle: { alignment: block.alignment, lineSpacing, spaceAbove: { magnitude: spaceAbove, unit: "PT" }, spaceBelow: { magnitude: spaceBelow, unit: "PT" }, namedStyleType: block.namedStyleType }, fields: paraFields.join(",") } });
 
         if (block.bulletPreset === "bullet" || block.bulletPreset === "numbered") {
           if (nextBulletStartIndex === null) { nextBulletStartIndex = start; nextBulletPreset = block.bulletPreset; }
@@ -525,8 +534,9 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
   // text + styled HTML (inline CSS only, so it renders consistently in
   // Gmail/Outlook/Apple Mail). `extraHeaders` are leading headers (To, Cc,
   // In-Reply-To, References, ...) emitted before Subject.
-  const buildStyledEmail = (extraHeaders: string[], subject: string, body: string) => {
+  const buildStyledEmail = (extraHeaders: string[], subject: string, body: string, customHtml?: string) => {
     const html =
+      customHtml ||
       `<!DOCTYPE html><html><body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Segoe UI,Arial,Helvetica,sans-serif;">` +
       `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 0;">` +
       `<tr><td align="center">` +
@@ -593,23 +603,25 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     return textResult(`From: ${get("From")}\nTo: ${get("To")}\nSubject: ${get("Subject")}\nDate: ${get("Date")}\n\n${body}`);
   });
 
-  server.tool("gmail_send_message", "Send a Gmail message with a professionally styled HTML layout (branded header, formatted body, footer).", {
+  server.tool("gmail_send_message", "Send a Gmail message with an AI-designed HTML layout. Design a unique, visually polished HTML email (inline CSS only, table-based for Gmail/Outlook compatibility) that fits the message's purpose and recipient — vary colors, fonts, spacing, and accents per email instead of reusing a template. Do NOT pass html_body to reuse the default branded layout.", {
     to: z.string().describe("Recipient email address"),
     subject: z.string().describe("Email subject"),
-    body: z.string().describe("Email body (plain text; rendered as styled HTML with brand header/footer)"),
+    body: z.string().describe("Email body (plain text version)"),
+    html_body: z.string().optional().describe("Optional custom AI-generated full HTML document (DOCTYPE + html + head with inline CSS + body). Must be self-contained with inline styles only, never external CSS/images. Omit to use the default Multimate AI template."),
     cc: z.string().optional().describe("Optional CC email address"),
-  }, async ({ to, subject, body, cc }) => {
+  }, async ({ to, subject, body, html_body, cc }) => {
     const extraHeaders = [`To: ${to}`, cc ? `Cc: ${cc}` : null].filter(Boolean);
-    const raw = buildStyledEmail(extraHeaders as string[], subject, body);
+    const raw = buildStyledEmail(extraHeaders as string[], subject, body, html_body);
     const res = await gmailApi().users.messages.send({ userId: "me", requestBody: { raw } });
     return textResult(`Sent message ${res.data.id} to ${to}.`);
   });
 
-  server.tool("gmail_reply_message", "Reply to an existing Gmail message, staying in the same thread. Replies use the same styled HTML layout as sent messages.", {
+  server.tool("gmail_reply_message", "Reply to an existing Gmail message, staying in the same thread. Replies use the same AI-designed HTML layout support as sent messages — design a unique styled HTML per reply, or omit html_body for the default branded layout.", {
     message_id: z.string().describe("ID of the message to reply to, from gmail_list_messages or gmail_read_message"),
-    body: z.string().describe("Reply body (plain text; rendered as styled HTML with brand header/footer)"),
+    body: z.string().describe("Reply body (plain text version)"),
+    html_body: z.string().optional().describe("Optional custom AI-generated full HTML document (DOCTYPE + html + head with inline CSS + body). Must be self-contained with inline styles only, never external CSS/images. Omit to use the default Multimate AI template."),
     reply_all: z.boolean().optional().default(false).describe("Also CC everyone else on the original message"),
-  }, async ({ message_id, body, reply_all }) => {
+  }, async ({ message_id, body, html_body, reply_all }) => {
     const original = await gmailApi().users.messages.get({ userId: "me", id: message_id, format: "metadata", metadataHeaders: ["Subject", "From", "To", "Cc", "Message-ID", "References"] });
     const headers = original.data.payload?.headers || [];
     const get = (name: string) => headers.find((h) => h.name === name)?.value || "";
@@ -628,7 +640,7 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
       references ? `References: ${references}` : null,
     ].filter(Boolean);
 
-    const raw = buildStyledEmail(extraHeaders as string[], subject, body);
+    const raw = buildStyledEmail(extraHeaders as string[], subject, body, html_body);
     const res = await gmailApi().users.messages.send({ userId: "me", requestBody: { raw, threadId: original.data.threadId! } });
     return textResult(`Replied with message ${res.data.id} in thread ${original.data.threadId}.`);
   });
