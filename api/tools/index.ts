@@ -530,13 +530,33 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
   const escapeHtml = (value: string) =>
     value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+  // Validates and sanitizes AI-generated email HTML before it is sent: strips
+  // executable/unsafe content (scripts, iframes, forms, event handlers,
+  // javascript: URLs, meta refresh), enforces a size cap, and guarantees the
+  // document starts with a DOCTYPE. Returns an empty string when the input is
+  // not a usable HTML document, so callers can fall back to the default template.
+  const sanitizeEmailHtml = (html: string) => {
+    let safe = String(html).slice(0, 100_000);
+    safe = safe.replace(/<script[\s\S]*?<\/script>/gi, "");
+    safe = safe.replace(/<(iframe|object|embed|form|link|base)[^>]*>/gi, "");
+    safe = safe.replace(/<meta[^>]*>/gi, "");
+    safe = safe.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+    safe = safe.replace(/\s?url\s*\(\s*(['"]?)\s*javascript:[^)]*\)/gi, "");
+    safe = safe.replace(/href\s*=\s*(['"]?)\s*javascript:[^>]*/gi, "");
+    safe = safe.replace(/expression\s*\([^)]*\)/gi, "");
+    if (!/<body[\s>]/i.test(safe)) return "";
+    if (!/^<!DOCTYPE\s+html/i.test(safe.trimStart())) safe = `<!DOCTYPE html>\n${safe.trimStart()}`;
+    return safe;
+  };
+
   // Builds a complete, ready-to-send RFC 2822 message as base64url: plain
   // text + styled HTML (inline CSS only, so it renders consistently in
   // Gmail/Outlook/Apple Mail). `extraHeaders` are leading headers (To, Cc,
   // In-Reply-To, References, ...) emitted before Subject.
   const buildStyledEmail = (extraHeaders: string[], subject: string, body: string, customHtml?: string) => {
+    const sanitized = customHtml ? sanitizeEmailHtml(customHtml) : "";
     const html =
-      customHtml ||
+      sanitized ||
       `<!DOCTYPE html><html><body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Segoe UI,Arial,Helvetica,sans-serif;">` +
       `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 0;">` +
       `<tr><td align="center">` +
@@ -607,7 +627,7 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     to: z.string().describe("Recipient email address"),
     subject: z.string().describe("Email subject"),
     body: z.string().describe("Email body (plain text version)"),
-    html_body: z.string().optional().describe("Optional custom AI-generated full HTML document (DOCTYPE + html + head with inline CSS + body). Must be self-contained with inline styles only, never external CSS/images. Omit to use the default Multimate AI template."),
+    html_body: z.string().optional().describe("Optional custom AI-generated full HTML document (DOCTYPE + html + head with inline CSS + body). Must be self-contained with inline styles only, never external CSS/images. It is sanitized (scripts, event handlers, javascript: URLs stripped) and falls back to the default Multimate AI template if invalid."),
     cc: z.string().optional().describe("Optional CC email address"),
   }, async ({ to, subject, body, html_body, cc }) => {
     const extraHeaders = [`To: ${to}`, cc ? `Cc: ${cc}` : null].filter(Boolean);
@@ -619,7 +639,7 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
   server.tool("gmail_reply_message", "Reply to an existing Gmail message, staying in the same thread. Replies use the same AI-designed HTML layout support as sent messages — design a unique styled HTML per reply, or omit html_body for the default branded layout.", {
     message_id: z.string().describe("ID of the message to reply to, from gmail_list_messages or gmail_read_message"),
     body: z.string().describe("Reply body (plain text version)"),
-    html_body: z.string().optional().describe("Optional custom AI-generated full HTML document (DOCTYPE + html + head with inline CSS + body). Must be self-contained with inline styles only, never external CSS/images. Omit to use the default Multimate AI template."),
+    html_body: z.string().optional().describe("Optional custom AI-generated full HTML document (DOCTYPE + html + head with inline CSS + body). Must be self-contained with inline styles only, never external CSS/images. It is sanitized (scripts, event handlers, javascript: URLs stripped) and falls back to the default Multimate AI template if invalid."),
     reply_all: z.boolean().optional().default(false).describe("Also CC everyone else on the original message"),
   }, async ({ message_id, body, html_body, reply_all }) => {
     const original = await gmailApi().users.messages.get({ userId: "me", id: message_id, format: "metadata", metadataHeaders: ["Subject", "From", "To", "Cc", "Message-ID", "References"] });
