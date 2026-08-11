@@ -8,6 +8,17 @@ import { firecrawl } from "../lib/firecrawl.js";
 import type { McpServer } from "./helpers.js";
 import { createGoogleAuthFromToken, normalizeBlock, textResult } from "./helpers.js";
 
+// GramJS returns the bare positive peer ID regardless of entity type, but
+// Telegram's own ID convention (and what send_message/getEntity expect back)
+// is: users positive, basic groups negated, channels/supergroups "-100"-prefixed.
+function formatChatId(entity: any): string {
+  const rawId = entity?.id?.toString() || "";
+  if (!rawId) return rawId;
+  if (entity?.className === "Channel") return `-100${rawId}`;
+  if (entity?.className === "Chat") return `-${rawId}`;
+  return rawId;
+}
+
 function makeTelegramClient(session: string) {
   return new TelegramClient(new StringSession(session), Number(process.env.TELEGRAM_API_ID), process.env.TELEGRAM_API_HASH || "", { connectionRetries: 5 });
 }
@@ -75,7 +86,7 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
         else if (entity?.className?.includes("Chat")) type = "group";
         if (entity?.megagroup) type = "supergroup";
         return {
-          id: entity?.id?.toString() || d.id?.toString(),
+          id: entity ? formatChatId(entity) : d.id?.toString(),
           title: d.title || entity?.title || `${entity?.firstName || ""} ${entity?.lastName || ""}`.trim() || "Unknown",
           username,
           type,
@@ -96,7 +107,7 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
         else if (entity?.className?.includes("Chat")) type = "group";
         return textResult({
           success: true,
-          id: entity.id?.toString(),
+          id: formatChatId(entity),
           title: entity.title || `${entity.firstName || ""} ${entity.lastName || ""}`.trim() || clean,
           username: entity.username || clean,
           type,
