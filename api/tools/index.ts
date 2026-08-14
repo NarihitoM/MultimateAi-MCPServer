@@ -34,12 +34,13 @@ async function withTelegram<T>(session: string, fn: (client: TelegramClient) => 
 }
 
 async function n8nFetch(auth: Record<string, string>, path: string, options: RequestInit = {}) {
-  const n8nUrl = auth["X-N8N-URL"];
+  const n8nUrl = auth.n8n_url;
   if (!n8nUrl) throw new Error("n8n URL not configured.");
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (auth["X-N8N-Cookie"]) headers["Cookie"] = auth["X-N8N-Cookie"];
-  if (auth["X-N8N-API-Key"]) headers["X-N8N-API-Key"] = auth["X-N8N-API-Key"];
-  const response = await fetch(`${n8nUrl}/api/v1${path}`, { ...options, headers: { ...headers, ...(options.headers as Record<string, string> || {}) } });
+  if (auth.n8n_cookie) headers["Cookie"] = auth.n8n_cookie;
+  if (auth.n8n_api_key) headers["X-N8N-API-Key"] = auth.n8n_api_key;
+  const url = `${n8nUrl.replace(/\/+$/, "")}/api/v1${path}`;
+  const response = await fetch(url, { ...options, headers: { ...headers, ...(options.headers as Record<string, string> || {}) } });
   if (!response.ok) throw new Error(`n8n API error (${response.status}): ${await response.text()}`);
   return response.json();
 }
@@ -761,6 +762,18 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     const data = await n8nFetch(auth, "/credentials");
     const creds = (data.data || []).map((c: any) => `${c.id}: ${c.name} (${c.type})`).join("\n");
     return textResult(creds || "No credentials found.");
+  });
+
+  server.tool("n8n_trigger_webhook", "Trigger an n8n webhook URL directly with an optional JSON payload. Works with any n8n instance including Cloud Free, where the REST API is unavailable.", { webhookUrl: z.string().describe("The full webhook URL (e.g. https://your-n8n.app/webhook/xxx)"), payload: z.record(z.any()).optional().describe("Optional JSON payload to send") }, async ({ webhookUrl, payload }) => {
+    const res = await fetch(webhookUrl.replace(/\/+$/, ""), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload ? JSON.stringify(payload) : undefined,
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`n8n webhook error (${res.status}): ${await res.text()}`);
+    const contentType = res.headers.get("content-type") || "";
+    return textResult(contentType.includes("application/json") ? JSON.stringify(await res.json(), null, 2) : await res.text());
   });
 
   // ── GitHub ──

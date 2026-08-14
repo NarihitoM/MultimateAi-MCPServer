@@ -29,9 +29,9 @@ export default async function handler(req: any, res: any) {
     slack_token: req.headers["x-slack-token"] || "",
     telegram_session: req.headers["x-telegram-session"] || "",
     GOOGLE_ACCESS_TOKEN: req.headers["x-google-access-token"] || "",
-    "X-N8N-URL": req.headers["x-n8n-url"] || "",
-    "X-N8N-API-KEY": req.headers["x-n8n-api-key"] || "",
-    "X-N8N-Cookie": req.headers["x-n8n-cookie"] || "",
+    n8n_url: req.headers["x-n8n-url"] || "",
+    n8n_api_key: req.headers["x-n8n-api-key"] || "",
+    n8n_cookie: req.headers["x-n8n-cookie"] || "",
     github_token: req.headers["x-github-token"] || "",
     discord_bot_token: req.headers["x-discord-bot-token"] || "",
   };
