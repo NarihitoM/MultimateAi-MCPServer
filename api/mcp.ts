@@ -32,6 +32,8 @@ export default async function handler(req: any, res: any) {
     n8n_url: req.headers["x-n8n-url"] || "",
     n8n_api_key: req.headers["x-n8n-api-key"] || "",
     n8n_cookie: req.headers["x-n8n-cookie"] || "",
+    vercel_token: req.headers["x-vercel-token"] || "",
+    vercel_team_id: req.headers["x-vercel-team-id"] || "",
     github_token: req.headers["x-github-token"] || "",
     discord_bot_token: req.headers["x-discord-bot-token"] || "",
   };

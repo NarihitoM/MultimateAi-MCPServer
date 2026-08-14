@@ -33,6 +33,24 @@ async function withTelegram<T>(session: string, fn: (client: TelegramClient) => 
   }
 }
 
+async function vercelFetch(auth: Record<string, string>, path: string, options: RequestInit = {}) {
+  const token = auth.vercel_token;
+  if (!token) throw new Error("Vercel account not connected.");
+  const url = new URL(`https://api.vercel.com${path}`);
+  if (auth.vercel_team_id) url.searchParams.set("teamId", auth.vercel_team_id);
+  const response = await fetch(url.toString(), {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(options.headers as Record<string, string> || {}),
+    },
+  });
+  if (!response.ok) throw new Error(`Vercel API error (${response.status}): ${await response.text()}`);
+  if (response.status === 204) return null;
+  return response.json();
+}
+
 async function n8nFetch(auth: Record<string, string>, path: string, options: RequestInit = {}) {
   const n8nUrl = auth.n8n_url;
   if (!n8nUrl) throw new Error("n8n URL not configured.");
@@ -774,6 +792,102 @@ export async function registerAllTools(server: McpServer, auth: Record<string, s
     if (!res.ok) throw new Error(`n8n webhook error (${res.status}): ${await res.text()}`);
     const contentType = res.headers.get("content-type") || "";
     return textResult(contentType.includes("application/json") ? JSON.stringify(await res.json(), null, 2) : await res.text());
+  });
+
+  // ── Vercel ──
+  server.tool("vercel_list_projects", "List all Vercel projects in the connected account or team, with their IDs, names, and latest production deployment state.", {}, async () => {
+    const data = await vercelFetch(auth, "/v10/projects");
+    const projects = (data.projects || []).map((p: any) => `${p.id}: ${p.name} (latest: ${p.latestDeployments?.[0]?.readyState || "none"})`).join("\n");
+    return textResult(projects || "No projects found.");
+  });
+
+  server.tool("vercel_get_project", "Get full details of a specific Vercel project including its framework, env var count, and domains.", { projectId: z.string().describe("The project ID or name") }, async ({ projectId }) => {
+    const data = await vercelFetch(auth, `/v9/projects/${encodeURIComponent(projectId)}`);
+    return textResult(JSON.stringify(data, null, 2));
+  });
+
+  server.tool("vercel_list_deployments", "List recent deployments, optionally filtered by project. Use this to see build/deploy history and current status.", { projectId: z.string().optional().describe("Filter by project ID or name"), limit: z.number().optional().describe("Max results (default 10)"), target: z.string().optional().describe("Filter by target environment, e.g. 'production' or 'preview'") }, async ({ projectId, limit, target }) => {
+    const params = new URLSearchParams();
+    if (projectId) params.set("projectId", projectId);
+    if (limit) params.set("limit", String(limit));
+    if (target) params.set("target", target);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const data = await vercelFetch(auth, `/v7/deployments${query}`);
+    const deployments = (data.deployments || []).map((d: any) => `${d.uid}: ${d.name} - ${d.readyState} (${d.target || "preview"}) - ${d.url}`).join("\n");
+    return textResult(deployments || "No deployments found.");
+  });
+
+  server.tool("vercel_get_deployment", "Get full details of a specific deployment including its build status, source, and creator.", { deploymentId: z.string().describe("The deployment ID or URL") }, async ({ deploymentId }) => {
+    const data = await vercelFetch(auth, `/v13/deployments/${encodeURIComponent(deploymentId)}`);
+    return textResult(JSON.stringify(data, null, 2));
+  });
+
+  server.tool("vercel_get_deployment_logs", "Get the build/runtime event log for a deployment. Use this to diagnose why a build or deployment failed.", { deploymentId: z.string().describe("The deployment ID or URL") }, async ({ deploymentId }) => {
+    const data = await vercelFetch(auth, `/v3/deployments/${encodeURIComponent(deploymentId)}/events`);
+    const events = (Array.isArray(data) ? data : []).map((e: any) => `[${e.type}] ${e.text || e.payload?.text || ""}`).join("\n");
+    return textResult(events || "No log events found.");
+  });
+
+  server.tool("vercel_list_domains", "List all domains configured across the connected Vercel account or team.", {}, async () => {
+    const data = await vercelFetch(auth, "/v5/domains");
+    const domains = (data.domains || []).map((d: any) => `${d.name} (${d.verified ? "verified" : "unverified"})`).join("\n");
+    return textResult(domains || "No domains found.");
+  });
+
+  server.tool("vercel_redeploy", "Trigger a new deployment by redeploying an existing one (rebuilds from the same source). Use this to retry a failed build or force a fresh deploy.", { deploymentId: z.string().describe("The deployment ID to redeploy"), target: z.string().optional().describe("Target environment, e.g. 'production' (defaults to the original deployment's target)") }, async ({ deploymentId, target }) => {
+    const source = await vercelFetch(auth, `/v13/deployments/${encodeURIComponent(deploymentId)}`);
+    const data = await vercelFetch(auth, "/v13/deployments", {
+      method: "POST",
+      body: JSON.stringify({ name: source.name, deploymentId, target: target || source.target || undefined }),
+    });
+    return textResult(`Redeployed. New deployment: ${data.id} - ${data.url}`);
+  });
+
+  server.tool("vercel_cancel_deployment", "Cancel a deployment that is currently building.", { deploymentId: z.string().describe("The deployment ID to cancel") }, async ({ deploymentId }) => {
+    const data = await vercelFetch(auth, `/v12/deployments/${encodeURIComponent(deploymentId)}/cancel`, { method: "PATCH" });
+    return textResult(`Cancelled deployment ${data.id || deploymentId} (${data.readyState || "CANCELED"})`);
+  });
+
+  server.tool("vercel_promote_deployment", "Point a project's production traffic to a specific existing deployment (promote/rollback to it).", { projectId: z.string().describe("The project ID"), deploymentId: z.string().describe("The deployment ID to promote to production") }, async ({ projectId, deploymentId }) => {
+    await vercelFetch(auth, `/v10/projects/${encodeURIComponent(projectId)}/promote/${encodeURIComponent(deploymentId)}`, { method: "POST" });
+    return textResult(`Promoted deployment ${deploymentId} to production for project ${projectId}.`);
+  });
+
+  server.tool("vercel_list_env", "List the environment variables configured on a project (names, targets, and types only — values are not returned).", { projectId: z.string().describe("The project ID or name") }, async ({ projectId }) => {
+    const data = await vercelFetch(auth, `/v10/projects/${encodeURIComponent(projectId)}/env`);
+    const envs = (data.envs || []).map((e: any) => `${e.id}: ${e.key} [${(e.target || []).join(", ")}] (${e.type})`).join("\n");
+    return textResult(envs || "No environment variables found.");
+  });
+
+  server.tool("vercel_add_env", "Add a new environment variable to a project.", { projectId: z.string().describe("The project ID or name"), key: z.string().describe("Environment variable name"), value: z.string().describe("Environment variable value"), target: z.array(z.enum(["production", "preview", "development"])).describe("Which environments this applies to"), type: z.enum(["plain", "encrypted", "sensitive"]).optional().describe("Defaults to 'encrypted'") }, async ({ projectId, key, value, target, type }) => {
+    const data = await vercelFetch(auth, `/v10/projects/${encodeURIComponent(projectId)}/env`, {
+      method: "POST",
+      body: JSON.stringify({ key, value, target, type: type || "encrypted" }),
+    });
+    return textResult(`Added env var ${key} to project ${projectId}. ID: ${data.created?.id || data.id || "unknown"}`);
+  });
+
+  server.tool("vercel_update_env", "Update the value or targets of an existing project environment variable.", { projectId: z.string().describe("The project ID or name"), envId: z.string().describe("The environment variable's ID (from vercel_list_env)"), value: z.string().optional().describe("New value"), target: z.array(z.enum(["production", "preview", "development"])).optional().describe("New target environments") }, async ({ projectId, envId, value, target }) => {
+    const body: any = {};
+    if (value !== undefined) body.value = value;
+    if (target) body.target = target;
+    await vercelFetch(auth, `/v9/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(envId)}`, { method: "PATCH", body: JSON.stringify(body) });
+    return textResult(`Updated env var ${envId} on project ${projectId}.`);
+  });
+
+  server.tool("vercel_remove_env", "Permanently remove an environment variable from a project.", { projectId: z.string().describe("The project ID or name"), envId: z.string().describe("The environment variable's ID (from vercel_list_env)") }, async ({ projectId, envId }) => {
+    await vercelFetch(auth, `/v9/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(envId)}`, { method: "DELETE" });
+    return textResult(`Removed env var ${envId} from project ${projectId}.`);
+  });
+
+  server.tool("vercel_delete_deployment", "Permanently delete a deployment. This action cannot be undone.", { deploymentId: z.string().describe("The deployment ID to delete") }, async ({ deploymentId }) => {
+    await vercelFetch(auth, `/v13/deployments/${encodeURIComponent(deploymentId)}`, { method: "DELETE" });
+    return textResult(`Deleted deployment ${deploymentId}.`);
+  });
+
+  server.tool("vercel_delete_project", "Permanently delete a Vercel project and all its deployments. This action cannot be undone.", { projectId: z.string().describe("The project ID or name to delete") }, async ({ projectId }) => {
+    await vercelFetch(auth, `/v9/projects/${encodeURIComponent(projectId)}`, { method: "DELETE" });
+    return textResult(`Deleted project ${projectId}.`);
   });
 
   // ── GitHub ──

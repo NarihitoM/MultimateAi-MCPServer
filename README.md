@@ -11,6 +11,9 @@ A comprehensive **Model Context Protocol (MCP)** server deployed on Vercel that 
 - **Gmail** — List, read, send messages
 - **Web Search & Scrape** — Search Google, scrape web pages (via Firecrawl)
 - **n8n** — List, create, update, delete, trigger workflows & executions
+- **GitHub** — List repos/issues/PRs, create issues, comment, commit files, check profile & notifications
+- **Discord** — List channels, send messages, read message history
+- **Vercel** — List/inspect projects & deployments, read logs, redeploy/cancel/promote, manage env vars, delete deployments/projects
 
 ---
 
@@ -40,13 +43,17 @@ Edit `claude_desktop_config.json`:
     "multimate": {
       "url": "https://narihito-mcp-servers.vercel.app/api/mcp",
       "headers": {
-        "x-api-key": "your-api-key-if-configured(Ask Me If You Wanna Try)",
+        "x-api-key": "your-api-key-if-configured",
         "x-slack-token": "xoxb-...",
         "x-notion-token": "ntn_...",
         "x-telegram-session": "...",
         "x-google-access-token": "ya29...",
         "x-n8n-url": "https://...",
-        "x-n8n-api-key": "..."
+        "x-n8n-api-key": "...",
+        "x-github-token": "ghp_...",
+        "x-discord-bot-token": "...",
+        "x-vercel-token": "...",
+        "x-vercel-team-id": "team_... (optional, only for team-scoped accounts)"
       }
     }
   }
@@ -66,7 +73,7 @@ Add to your VS Code settings or `.vscode/mcp.json`:
       "type": "url",
       "url": "https://narihito-mcp-servers.vercel.app/api/mcp",
       "headers": {
-        "x-api-key": "your-api-key-if-configured(Ask Me If You Wanna Try)",
+        "x-api-key": "your-api-key-if-configured",
         "x-slack-token": "xoxb-...",
         "x-notion-token": "ntn_..."
       }
@@ -91,8 +98,7 @@ In Cursor settings → MCP Servers → Add new:
 <summary><b>Claude Code (CLI)</b></summary>
 
 ```bash
-claude mcp add multimate --url https://narihito-mcp-servers.vercel.app/api/mcp
- \
+claude mcp add multimate --url https://narihito-mcp-servers.vercel.app/api/mcp \
   --header "x-api-key=..." \
   --header "x-slack-token=..."
 ```
@@ -163,7 +169,8 @@ claude mcp add multimate --url https://narihito-mcp-servers.vercel.app/api/mcp
 |------|-------------|
 | `gmail_list_messages` | List messages matching a search query |
 | `gmail_read_message` | Read the full content of a message by ID |
-| `gmail_send_message` | Send a message |
+| `gmail_send_message` | Send a message with an AI-designed HTML layout |
+| `gmail_reply_message` | Reply to an existing message thread |
 
 ### Web
 | Tool | Description |
@@ -186,6 +193,45 @@ claude mcp add multimate --url https://narihito-mcp-servers.vercel.app/api/mcp
 | `n8n_get_execution` | Get detailed execution info |
 | `n8n_retry_execution` | Retry a failed execution |
 | `n8n_list_credentials` | List available n8n credentials |
+| `n8n_trigger_webhook` | Trigger an n8n webhook URL directly with a JSON payload (works even without REST API access, e.g. Cloud Free) |
+
+### GitHub
+| Tool | Description |
+|------|-------------|
+| `list_repos` | List the authenticated user's repositories |
+| `list_issues` | List issues in a repository, filtered by state |
+| `create_issue` | Create a new issue |
+| `comment_issue` | Add a comment to an existing issue |
+| `list_pull_requests` | List pull requests in a repository, filtered by state |
+| `get_profile` | Get the authenticated user's GitHub profile |
+| `list_notifications` | List unread (or all) notifications |
+| `commit_file` | Create or update a file and commit it directly to a branch |
+
+### Discord
+| Tool | Description |
+|------|-------------|
+| `discord_list_channels` | List channels in a guild |
+| `discord_send_message` | Send a message to a channel |
+| `discord_read_messages` | Read recent messages from a channel |
+
+### Vercel
+| Tool | Description |
+|------|-------------|
+| `vercel_list_projects` | List all projects in the account/team |
+| `vercel_get_project` | Get full details of a project |
+| `vercel_list_deployments` | List recent deployments, optionally filtered by project |
+| `vercel_get_deployment` | Get full details of a deployment |
+| `vercel_get_deployment_logs` | Get the build/runtime event log for a deployment |
+| `vercel_list_domains` | List domains configured across the account/team |
+| `vercel_redeploy` | Redeploy an existing deployment |
+| `vercel_cancel_deployment` | Cancel a deployment that is currently building |
+| `vercel_promote_deployment` | Point production traffic at a specific deployment |
+| `vercel_list_env` | List a project's environment variable names/targets/types (values are never returned) |
+| `vercel_add_env` | Add a new environment variable to a project |
+| `vercel_update_env` | Update an existing environment variable |
+| `vercel_remove_env` | Remove an environment variable |
+| `vercel_delete_deployment` | Permanently delete a deployment |
+| `vercel_delete_project` | Permanently delete a project and all its deployments |
 
 ---
 
@@ -202,7 +248,23 @@ Each service requires specific headers. Pass them when connecting your AI client
 | `x-n8n-url` | n8n | Your n8n instance base URL (e.g. `https://n8n.example.com`) |
 | `x-n8n-api-key` | n8n | n8n API key (alternative to cookie auth) |
 | `x-n8n-cookie` | n8n | n8n session cookie (alternative to API key) |
+| `x-github-token` | GitHub | GitHub personal access token or OAuth token |
+| `x-discord-bot-token` | Discord | Discord bot token |
+| `x-vercel-token` | Vercel | Vercel OAuth access token (from the Integration token exchange) |
+| `x-vercel-team-id` | Vercel | Team ID, required only when the connection is team-scoped (personal accounts omit it) |
 | `x-api-key` | (optional auth) | Set via `MCP_API_KEY` env variable on Vercel |
+
+---
+
+## Environment Variables
+
+Set these in the Vercel project (or a local `.env` for `vercel dev`):
+
+| Variable | Purpose |
+|---|---|
+| `MCP_API_KEY` | Optional shared key gating this server itself (checked against the `x-api-key` header). If unset, the server is open to anyone with the URL. |
+| `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` | Telegram MTProto app credentials, required for every Telegram tool call |
+| `FIRECRAWL_API_KEY` | Picked up implicitly by the Firecrawl SDK (`new Firecrawl()`) for `web_search`/`web_scrape` — not referenced directly in code, but required for those tools to work |
 
 ---
 
@@ -230,7 +292,8 @@ The MCP endpoint will be available at `http://localhost:3000/api/mcp`.
 │   ├── lib/
 │   │   └── firecrawl.ts     # Firecrawl (web scraping) client
 │   └── tools/
-│       ├── index.ts         # All tool registrations
+│       ├── index.ts         # All tool registrations (Telegram, Slack, Notion,
+│       │                    #  Google, n8n, GitHub, Discord, Vercel, web)
 │       └── helpers.ts       # Shared utilities (Google auth, Notion blocks, etc.)
 ├── vercel.json              # Vercel deployment config
 ├── package.json
